@@ -14,11 +14,12 @@ import {
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import chatIcon from "@/assets/images/auth/chat-icon.png";
+import { AuthBackButton } from "@/components/auth/auth-screen-shell";
 import { AuthGlowBackground } from "@/components/shared/glow-background";
 import { HookLoader } from "@/components/shared/HookLoader";
 import { toast } from "@/components/shared/toast";
 import { useStartSignupMutation } from "@/lib/auth-api";
-import { ensureGuestId, savePendingSignup } from "@/lib/session";
+import { savePendingSignup } from "@/lib/session";
 
 const MIN_LENGTH = 9;
 const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
@@ -39,26 +40,45 @@ export function CreatePassword({ email }: { email: string }) {
 
   async function handleContinue() {
     if (!EMAIL_REGEX.test(normalizedEmail)) {
-      toast.error("Email required", "Start with your email before creating a password.");
+      toast.error(
+        "Email required",
+        "Start with your email before creating a password.",
+      );
       router.replace("/auth");
       return;
     }
     setTouched(true);
     if (!isValid) return;
     try {
-      const guestId = await ensureGuestId();
-      const result = await startSignup.mutateAsync({ email: normalizedEmail, password, guestId });
-      await savePendingSignup({ email: normalizedEmail, signupSessionToken: result.signupSessionToken, step: 'verify_email' });
-      toast.success('Code sent', 'Check your email for the verification code.');
-      router.push({ pathname: '/auth/verify-email', params: { email: normalizedEmail } });
+      const result = await startSignup.mutateAsync({
+        email: normalizedEmail,
+        password,
+      });
+      await savePendingSignup({
+        email: normalizedEmail,
+        signupSessionToken: result.signupSessionToken,
+        step: "verify_email",
+      });
+      toast.success("Code sent", "Check your email for the verification code.");
+      router.push({
+        pathname: "/auth/verify-email",
+        params: { email: normalizedEmail },
+      });
     } catch (error) {
-      const message = error instanceof Error ? error.message : 'Please try again.';
-      if (message.toLowerCase().includes('already exists')) {
-        toast.info('Account found', 'Sign in with your password to continue.');
-        router.replace({ pathname: '/auth/password', params: { email: normalizedEmail } });
+      const message =
+        error instanceof Error ? error.message : "Please try again.";
+      if (message.toLowerCase().includes("already exists")) {
+        toast.info("Account found", "Sign in with your password to continue.");
+        router.replace({
+          pathname: "/auth/password",
+          params: { email: normalizedEmail },
+        });
         return;
       }
-      toast.error('Could not start signup', error instanceof Error ? error.message : 'Please try again.');
+      toast.error(
+        "Could not start signup",
+        error instanceof Error ? error.message : "Please try again.",
+      );
     }
   }
 
@@ -86,21 +106,7 @@ export function CreatePassword({ email }: { email: string }) {
         >
           {/* Back button */}
           <View className="px-4" style={{ paddingTop: insets.top + 8 }}>
-            <Pressable
-              accessibilityLabel="Go back"
-              accessibilityRole="button"
-              className="h-[49px] w-[49px] items-center justify-center rounded-[24.5px] border border-white/35 bg-white/[0.18]"
-              style={{
-                shadowColor: "#000",
-                shadowOffset: { width: 0, height: 4 },
-                shadowOpacity: 0.12,
-                shadowRadius: 8,
-                elevation: 4,
-              }}
-              onPress={() => router.back()}
-            >
-              <Ionicons name="chevron-back" size={22} color="#000" />
-            </Pressable>
+            <AuthBackButton />
           </View>
 
           {/* Content */}
@@ -114,7 +120,9 @@ export function CreatePassword({ email }: { email: string }) {
               </Text>
               <Text className="text-base leading-[22px] text-hook-text">
                 Add a way to protect your account{" "}
-                <Text className="font-medium text-[#121212]">{normalizedEmail}</Text>
+                <Text className="font-medium text-[#121212]">
+                  {normalizedEmail}
+                </Text>
               </Text>
             </View>
 
@@ -187,7 +195,11 @@ export function CreatePassword({ email }: { email: string }) {
                 {loading ? (
                   <HookLoader size="button" variant="dark" />
                 ) : (
-                  <Text className={`text-sm font-medium ${isValid ? "text-black" : "text-white"}`}>continue</Text>
+                  <Text
+                    className={`text-sm font-medium ${isValid ? "text-black" : "text-white"}`}
+                  >
+                    continue
+                  </Text>
                 )}
               </Pressable>
             </View>

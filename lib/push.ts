@@ -3,7 +3,7 @@ import * as Notifications from 'expo-notifications';
 import { Platform } from 'react-native';
 
 import { apiRequest } from '@/lib/api';
-import { getGuestId, getSession } from '@/lib/session';
+import { getDeviceId, getSession } from '@/lib/session';
 
 Notifications.setNotificationHandler({
   handleNotification: async () => ({
@@ -27,8 +27,7 @@ export async function registerPushToken(options: { sendWelcome?: boolean } = {})
 
     const token = await Notifications.getExpoPushTokenAsync();
     const session = await getSession();
-    const guestId = await getGuestId();
-    if (!session?.accessToken && !guestId) return null;
+    if (!session?.accessToken) return null;
 
     await apiRequest('/devices/register', {
       method: 'POST',
@@ -36,6 +35,7 @@ export async function registerPushToken(options: { sendWelcome?: boolean } = {})
         expoPushToken: token.data,
         platform: Platform.OS,
         deviceName: Device.deviceName || Device.modelName || 'Hook device',
+        deviceId: await getDeviceId(),
         sendWelcome: options.sendWelcome,
       }),
     });
@@ -47,9 +47,15 @@ export async function registerPushToken(options: { sendWelcome?: boolean } = {})
 
 export async function unregisterPushToken(expoPushToken?: string) {
   try {
+    let token = expoPushToken;
+    if (!token && Device.isDevice) {
+      const permission = await Notifications.getPermissionsAsync();
+      if (permission.status === 'granted') token = (await Notifications.getExpoPushTokenAsync()).data;
+    }
+    if (!token) return;
     await apiRequest('/devices/unregister', {
       method: 'POST',
-      body: JSON.stringify({ expoPushToken }),
+      body: JSON.stringify({ expoPushToken: token }),
     });
   } catch {
     // best effort

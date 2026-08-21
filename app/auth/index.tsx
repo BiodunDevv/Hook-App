@@ -1,12 +1,5 @@
-import { StatusBar } from 'expo-status-bar';
-
-import { AuthStart } from '@/components/auth/auth-start';
+import { Redirect } from "expo-router";
 
 export default function AuthScreen() {
-  return (
-    <>
-      <StatusBar style="dark" />
-      <AuthStart />
-    </>
-  );
+  return <Redirect href="/(tabs)" />;
 }

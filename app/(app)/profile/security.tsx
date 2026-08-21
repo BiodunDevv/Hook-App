@@ -1,0 +1,19 @@
+import { Ionicons } from '@expo/vector-icons';
+import * as LocalAuthentication from 'expo-local-authentication';
+import { useEffect, useState } from 'react';
+import { Pressable, ScrollView, Switch, Text, TextInput, View } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { HookLoader } from '@/components/shared/HookLoader';
+import { HookBackButton } from '@/components/shared/HookBackButton';
+import { toast } from '@/components/shared/toast';
+import { changePassword } from '@/lib/auth-api';
+import { getBiometricEnabled, setBiometricEnabled } from '@/lib/session';
+
+export default function SecurityScreen() {
+  const insets = useSafeAreaInsets(); const [enabled, setEnabled] = useState(false); const [available, setAvailable] = useState(false); const [current, setCurrent] = useState(''); const [next, setNext] = useState(''); const [busy, setBusy] = useState(false);
+  useEffect(() => { void Promise.all([getBiometricEnabled(), LocalAuthentication.hasHardwareAsync(), LocalAuthentication.isEnrolledAsync()]).then(([saved, hardware, enrolled]) => { setEnabled(saved); setAvailable(hardware && enrolled); }); }, []);
+  async function toggle(value: boolean) { if (value) { const result = await LocalAuthentication.authenticateAsync({ promptMessage: 'Enable biometric lock', fallbackLabel: 'Use device passcode', disableDeviceFallback: false }); if (!result.success) return; } await setBiometricEnabled(value); setEnabled(value); toast.success(value ? 'Biometric lock enabled' : 'Biometric lock disabled', value ? 'Hook will verify you on cold launch.' : 'Hook will open without biometric verification.'); }
+  async function savePassword() { setBusy(true); try { await changePassword({ currentPassword: current, newPassword: next }); setCurrent(''); setNext(''); toast.success('Password changed', 'Use your new password next time you sign in.'); } catch (error) { toast.error('Could not change password', error instanceof Error ? error.message : 'Please try again.'); } finally { setBusy(false); } }
+  return <ScrollView className="flex-1 bg-[#F5F5F5]" contentContainerStyle={{ paddingTop: insets.top + 12, paddingHorizontal: 18, paddingBottom: 40 }}><Header title="Password & biometrics" /><View className="mt-6 rounded-[14px] bg-white p-4"><View className="flex-row items-center"><View className="h-10 w-10 items-center justify-center rounded-[10px] bg-[#FFF4C7]"><Ionicons name="finger-print" size={22} /></View><View className="ml-3 flex-1"><Text className="font-bold">Biometric app lock</Text><Text className="mt-1 text-xs leading-4 text-[#777]">Verify when Hook starts on this device.</Text></View><Switch value={enabled} disabled={!available} onValueChange={(value) => void toggle(value)} trackColor={{ true: '#FFC809' }} /></View>{!available ? <Text className="mt-3 text-xs text-[#A15C00]">Set up Face ID or fingerprint in your device settings first.</Text> : null}</View><View className="mt-4 rounded-[14px] bg-white p-4"><Text className="text-base font-black">Change password</Text><TextInput secureTextEntry placeholder="Current password" value={current} onChangeText={setCurrent} className="mt-4 h-[52px] rounded-[12px] bg-[#F5F5F5] px-4" /><TextInput secureTextEntry placeholder="New password" value={next} onChangeText={setNext} className="mt-3 h-[52px] rounded-[12px] bg-[#F5F5F5] px-4" /><Pressable disabled={busy || !current || next.length < 9} onPress={() => void savePassword()} className="mt-4 h-[52px] items-center justify-center rounded-full bg-hook disabled:opacity-40">{busy ? <HookLoader size="button" variant="dark" /> : <Text className="font-black">Update password</Text>}</Pressable></View></ScrollView>;
+}
+function Header({ title }: { title: string }) { return <View className="flex-row items-center"><HookBackButton /><Text className="ml-4 text-xl font-black">{title}</Text></View>; }

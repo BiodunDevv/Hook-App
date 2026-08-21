@@ -1,3 +1,3 @@
-import NotificationsScreen from '@/components/features/notifications/NotificationsScreen';
+import NotificationsScreen from '@/components/notifications/NotificationsScreen';
 
 export default NotificationsScreen;

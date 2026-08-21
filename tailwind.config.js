@@ -4,6 +4,15 @@ module.exports = {
   presets: [require("nativewind/preset")],
   theme: {
     extend: {
+      fontFamily: {
+        sans: ["NunitoSans-Regular"],
+        regular: ["NunitoSans-Regular"],
+        medium: ["NunitoSans-Medium"],
+        semibold: ["NunitoSans-SemiBold"],
+        bold: ["NunitoSans-Bold"],
+        extrabold: ["NunitoSans-ExtraBold"],
+        black: ["NunitoSans-Black"],
+      },
       colors: {
         hook: {
           DEFAULT: "#ffc809",
