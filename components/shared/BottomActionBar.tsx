@@ -18,6 +18,7 @@ export function BottomActionButton({
   onPress,
   disabled = false,
   loading = false,
+  busy = false,
   tone = "primary",
   icon,
   flex = 1,
@@ -26,11 +27,12 @@ export function BottomActionButton({
   onPress: () => void;
   disabled?: boolean;
   loading?: boolean;
+  busy?: boolean;
   tone?: "primary" | "secondary";
   icon?: IconName;
   flex?: number;
 }) {
-  const inactive = disabled || loading;
+  const inactive = disabled || loading || busy;
   const backgroundColor = inactive
     ? designTokens.color.disabled
     : tone === "primary"
@@ -41,7 +43,7 @@ export function BottomActionButton({
     <Pressable
       accessibilityRole="button"
       accessibilityLabel={label}
-      accessibilityState={{ disabled: inactive, busy: loading }}
+      accessibilityState={{ disabled: inactive, busy: loading || busy }}
       className="active:opacity-80"
       disabled={inactive}
       onPress={onPress}

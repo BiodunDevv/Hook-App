@@ -1,4 +1,5 @@
 import { router, useLocalSearchParams } from "expo-router";
+import { centeredHeaderTextStyle } from "@/constants/design-tokens";
 import { ScrollView, Text, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
@@ -95,7 +96,7 @@ export default function LegalContentScreen() {
     <View className="flex-1 bg-[#F1F1F3]" style={{ paddingTop: insets.top }}>
       <View className="flex-row items-center justify-between px-4 py-3">
         <HookBackButton onPress={goBack} />
-        <Text className="text-xl font-black text-black" numberOfLines={1}>
+        <Text style={centeredHeaderTextStyle} numberOfLines={1}>
           {title}
         </Text>
         <View className="w-11" />

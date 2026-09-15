@@ -7,6 +7,7 @@ import { StatusBar } from "expo-status-bar";
 import "react-native-reanimated";
 import { GestureHandlerRootView } from "react-native-gesture-handler";
 import { KeyboardProvider } from "react-native-keyboard-controller";
+import { BottomSheetModalProvider } from "@gorhom/bottom-sheet";
 import "../global.css";
 
 import { AppState, Text, TextInput, View } from "react-native";
@@ -147,6 +148,7 @@ export default function RootLayout() {
   return (
     <SafeAreaProvider>
       <GestureHandlerRootView style={{ flex: 1, backgroundColor: safeAreaBackground }}>
+        <BottomSheetModalProvider>
         <KeyboardProvider>
         <SafeAreaView
           edges={[]}
@@ -161,7 +163,7 @@ export default function RootLayout() {
                       than following the device — otherwise native chrome
                       like the iOS tab bar flips appearance between screens. */}
                   <ThemeProvider value={DefaultTheme}>
-            <Stack>
+            <Stack screenOptions={{ headerShown: false }}>
               <Stack.Screen
                 name="splash"
                 options={{
@@ -192,6 +194,7 @@ export default function RootLayout() {
               <Stack.Screen
                 name="(app)/notifications/[id]"
                 options={{
+                  headerShown: true,
                   presentation: "modal",
                   title: "Notification",
                   headerStyle: { backgroundColor: "#f1f1f3" },
@@ -322,6 +325,7 @@ export default function RootLayout() {
           </View>
         </SafeAreaView>
         </KeyboardProvider>
+        </BottomSheetModalProvider>
       </GestureHandlerRootView>
     </SafeAreaProvider>
   );

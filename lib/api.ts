@@ -110,6 +110,17 @@ export async function apiRequest<T>(path: string, options: ApiOptions = {}): Pro
     let session: AuthSession | null = null;
     if (options.auth !== false) {
       session = await getSession();
+      if (!refreshAttempted && session?.accessExpiresAt && Date.parse(session.accessExpiresAt) <= Date.now()) {
+        refreshAttempted = true;
+        const outcome = await refreshSessionOnce(session);
+        if (outcome.session) session = outcome.session;
+        else if (outcome.authRejected) {
+          await clearSession();
+          throw new ApiError('Your session expired. Please sign in again.', 401);
+        } else {
+          throw new ApiError('Unable to renew your session. Please try again when connected.', 0);
+        }
+      }
       if (session?.accessToken) headers.set('Authorization', `Bearer ${session.accessToken}`);
     }
     let response: Response;
@@ -192,8 +203,15 @@ async function refreshSessionWithOutcome(session: AuthSession): Promise<RefreshO
 }
 
 export async function refreshSession(session: AuthSession) {
-  const outcome = await refreshSessionWithOutcome(session);
+  const outcome = await refreshSessionOnce(session);
+  if (!outcome.session && outcome.authRejected) await clearSession();
   return outcome.session;
+}
+
+/** Startup does not rotate a still-valid weekly token on every app launch. */
+export async function resumeSession(session: AuthSession) {
+  if (session.accessExpiresAt && Date.parse(session.accessExpiresAt) > Date.now()) return session;
+  return refreshSession(session);
 }
 
 /**
@@ -214,6 +232,7 @@ function refreshSessionOnce(session: AuthSession) {
   if (!refreshOutcomeInFlight) {
     refreshOutcomeInFlight = (async () => {
       const current = (await getSession()) || session;
+      if (current.refreshToken !== session.refreshToken) return { session: current };
       return refreshSessionWithOutcome(current);
     })().finally(() => {
       refreshOutcomeInFlight = null;

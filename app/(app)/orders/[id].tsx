@@ -1,4 +1,5 @@
 import { Ionicons } from "@expo/vector-icons";
+import { centeredHeaderTextStyle } from "@/constants/design-tokens";
 import * as Clipboard from "expo-clipboard";
 import * as WebBrowser from "expo-web-browser";
 import { setPaymentFlowActive } from '@/lib/payment-flow';
@@ -98,7 +99,7 @@ export default function OrderDetailScreen() {
   return <View className="flex-1 bg-[#f3f3f5]" style={{ paddingTop: insets.top }}>
     <View className="flex-row items-center justify-between px-4 py-3">
       <HookBackButton />
-      <Text className="text-xl font-black">Order Details</Text>
+      <Text style={centeredHeaderTextStyle}>Order Details</Text>
       <View className="h-11 w-11" />
     </View>
 

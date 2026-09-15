@@ -1,4 +1,5 @@
 import { Ionicons } from "@expo/vector-icons";
+import { centeredHeaderTextStyle } from "@/constants/design-tokens";
 import { router } from "expo-router";
 import Animated from "react-native-reanimated";
 import { Pressable, Text, View } from "react-native";
@@ -125,7 +126,7 @@ export function MarketplaceCompactHeader({
                 </Text>
               ) : null}
               <Text
-                className="max-w-[230px] flex-shrink text-center text-[15px] font-black leading-5 text-[#111]"
+                style={[centeredHeaderTextStyle, { maxWidth: 230, flexShrink: 1 }]}
               >
                 {title}
               </Text>

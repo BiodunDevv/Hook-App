@@ -1,4 +1,5 @@
 import Constants from "expo-constants";
+import { centeredHeaderTextStyle } from "@/constants/design-tokens";
 import { Ionicons } from "@expo/vector-icons";
 import { router, useFocusEffect } from "expo-router";
 import { useCallback, useRef, useState } from "react";
@@ -17,6 +18,7 @@ import { ProfileAvatar, ProfileRow, ProfileSection } from "@/components/profile/
 import { HookConfirmSheet } from "@/components/shared/HookConfirmSheet";
 import { toast } from "@/components/shared/toast";
 import { logout, useLocalSessionQuery } from "@/lib/auth-api";
+import { useCreditsQuery } from "@/lib/mobile-api";
 import { unregisterPushToken } from "@/lib/push";
 import { clearSession } from "@/lib/session";
 import { getHookTabBarContentInset } from "@/components/tab-bar/layout";
@@ -42,6 +44,10 @@ export default function ProfileScreen() {
   const [logoutBusy, setLogoutBusy] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
   const session = local.data?.session;
+  const credits = useCreditsQuery(Boolean(session));
+  const creditsLabel = credits.data
+    ? `₦${Math.round(Number(credits.data.balanceMinor || 0) / 100).toLocaleString("en-NG")}`
+    : undefined;
 
   useFocusEffect(useCallback(() => {
     void refetch();
@@ -76,7 +82,7 @@ export default function ProfileScreen() {
       <View className="flex-1 bg-[#F4F4F5]" style={{ paddingTop: insets.top }}>
         <View className="flex-row items-center justify-between px-4 py-3">
           <View className="h-11 w-11" />
-          <Text className="text-xl font-black text-black">Profile</Text>
+          <Text style={centeredHeaderTextStyle}>Profile</Text>
           <View className="h-11 w-11" />
         </View>
 
@@ -178,6 +184,16 @@ export default function ProfileScreen() {
             <ProfileRow icon="location" label="My addresses" onPress={() => router.push("/addresses" as never)} />
             <ProfileRow icon="heart" label="Saved products" onPress={() => router.push("/likes" as never)} />
             <ProfileRow icon="chatbox" label="Messages" onPress={() => router.push("/(tabs)/messages" as never)} />
+          </ProfileSection>
+
+          <ProfileSection title="Rewards">
+            <ProfileRow
+              icon="wallet"
+              label="Hook Credits"
+              value={creditsLabel}
+              onPress={() => router.push("/credits" as never)}
+            />
+            <ProfileRow icon="gift" label="Refer a friend" onPress={() => router.push("/referrals" as never)} />
           </ProfileSection>
 
           <ProfileSection title="Security">

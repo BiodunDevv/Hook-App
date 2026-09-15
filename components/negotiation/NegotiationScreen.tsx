@@ -1,4 +1,5 @@
 import { router, useLocalSearchParams } from "expo-router";
+import { centeredHeaderTextStyle } from "@/constants/design-tokens";
 import * as Crypto from "expo-crypto";
 import { useQueryClient } from "@tanstack/react-query";
 import { useEffect, useMemo, useRef, useState } from "react";
@@ -348,7 +349,7 @@ export default function NegotiationScreen() {
     <View className="flex-1 bg-[#F1F1F3]" style={{ paddingTop: insets.top }}>
       <View className="flex-row items-center justify-between px-4 py-3">
         <HookBackButton />
-        <Text className="text-lg font-bold">Negotiate</Text>
+        <Text style={centeredHeaderTextStyle}>Negotiate</Text>
         <Pressable
           accessibilityRole="button"
           disabled={!sessionId || !open}

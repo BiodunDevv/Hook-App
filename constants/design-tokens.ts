@@ -22,6 +22,9 @@ export const designTokens = {
     control: 26,
   },
   typography: {
+    headerSize: 20,
+    headerLineHeight: 28,
+    headerFont: "NunitoSans-Bold",
     buttonSize: 15,
     labelSize: 11,
     valueSize: 16,
@@ -33,4 +36,12 @@ export const designTokens = {
     bottomInset: 8,
     bottomContentInset: 84,
   },
+} as const;
+
+export const centeredHeaderTextStyle = {
+  fontSize: designTokens.typography.headerSize,
+  lineHeight: designTokens.typography.headerLineHeight,
+  fontFamily: designTokens.typography.headerFont,
+  color: designTokens.color.ink,
+  textAlign: "center",
 } as const;

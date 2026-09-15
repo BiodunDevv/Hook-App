@@ -1,4 +1,5 @@
 import { Ionicons } from "@expo/vector-icons";
+import { centeredHeaderTextStyle } from "@/constants/design-tokens";
 import { useRef, useState } from "react";
 import {
   Pressable,
@@ -266,7 +267,7 @@ export default function AddressesScreen() {
     <View className="flex-1 bg-[#f4f4f5]" style={{ paddingTop: insets.top }}>
       <View className="flex-row items-center justify-between px-4 py-3">
         <HookBackButton />
-        <Text className="text-xl font-black text-black">Delivery addresses</Text>
+        <Text style={centeredHeaderTextStyle}>Delivery addresses</Text>
         <Pressable accessibilityLabel="Add delivery address" accessibilityRole="button" onPress={openNewWizard} className="h-11 w-11 items-center justify-center rounded-full bg-hook">
           <Ionicons name="add" size={23} color="#111" />
         </Pressable>

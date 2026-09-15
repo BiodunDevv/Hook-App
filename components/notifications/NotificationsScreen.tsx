@@ -1,4 +1,5 @@
 import { Ionicons } from '@expo/vector-icons';
+import { centeredHeaderTextStyle } from "@/constants/design-tokens";
 import { router } from 'expo-router';
 import { Alert, Image, Pressable, ScrollView, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -95,7 +96,7 @@ export default function NotificationsScreen() {
             position: 'absolute',
           }}
         />
-        <Text style={{ color: '#000', fontSize: 18, fontWeight: '700' }}>Notifications</Text>
+        <Text style={centeredHeaderTextStyle}>Notifications</Text>
       </View>
 
       {notifications.isLoading ? (

@@ -2,10 +2,11 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useEffect } from "react";
 import * as Crypto from "expo-crypto";
 
-import { apiRequest, ApiError } from "@/lib/api";
+import { apiRequest } from "@/lib/api";
 import type { NegotiationResponse } from '@/lib/negotiation-types';
 import { getSession, isCustomerSession, onSessionChanged } from "@/lib/session";
 import { hookRealtime } from './realtime';
+import { optimisticCartRemoval } from './cart-optimistic';
 import {
   addAnonymousCartItem,
   anonymousCartResponse,
@@ -187,6 +188,9 @@ export const mobileQueryKeys = {
   session: () => ["mobile", "auth", "session"] as const,
   likes: (userId?: string) => ["mobile", "likes", userId || "current"] as const,
   cart: () => ["mobile", "cart"] as const,
+  logisticsProviders: () => ["mobile", "logistics-providers"] as const,
+  credits: () => ["mobile", "credits"] as const,
+  referrals: () => ["mobile", "referrals"] as const,
   orders: (params?: QueryParams) => ["mobile", "orders", params ?? {}] as const,
   order: (id: string) => ["mobile", "orders", id] as const,
   orderFulfilment: (id: string) =>
@@ -622,6 +626,7 @@ type AddCartItemInput = {
 export function useAddCartItemMutation() {
   const queryClient = useQueryClient();
   return useMutation({
+    retry: false, // An unconfirmed POST must not be blindly repeated.
     mutationFn: async (input: AddCartItemInput) => {
       const { optimisticProduct: _product, ...payload } = input;
       const current = await getSession();
@@ -662,13 +667,15 @@ export function useAddCartItemMutation() {
         // Keep the optimistic result and reconcile it in the background.
         void queryClient.invalidateQueries({
           queryKey: mobileQueryKeys.cart(),
-          refetchType: "none",
         });
       }
     },
     onError: (_error, _input, context) => {
       if (context?.previous !== undefined) {
         queryClient.setQueryData(mobileQueryKeys.cart(), context.previous);
+      } else {
+        // No previous cart exists: do not leave a failed provisional item visible.
+        queryClient.removeQueries({ queryKey: mobileQueryKeys.cart(), exact: true });
       }
       // Reconcile ambiguous network failures in the background.
       void queryClient.invalidateQueries({ queryKey: mobileQueryKeys.cart() });
@@ -964,24 +971,44 @@ export function useUpdateCartItemMutation() {
 export function useRemoveCartItemMutation() {
   const queryClient = useQueryClient();
   return useMutation({
+    retry: false,
+    onMutate: async (itemId: string) => {
+      const key = mobileQueryKeys.cart();
+      await queryClient.cancelQueries({ queryKey: key });
+      const previous = queryClient.getQueryData(key);
+      queryClient.setQueryData(key, optimisticCartRemoval(previous, itemId));
+      return { previous };
+    },
     mutationFn: async (itemId: string) =>
       !isCustomerSession(await getSession())
         ? anonymousCartResponse(await removeAnonymousCartItem(itemId))
         : remove(`/cart/items/${itemId}`),
-    onSuccess: () =>
-      queryClient.invalidateQueries({ queryKey: mobileQueryKeys.cart() }),
+    onError: (_error, _itemId, context) => {
+      if (context?.previous !== undefined) queryClient.setQueryData(mobileQueryKeys.cart(), context.previous);
+    },
+    onSettled: () => { void queryClient.invalidateQueries({ queryKey: mobileQueryKeys.cart() }); },
   });
 }
 
 export function useClearCartMutation() {
   const queryClient = useQueryClient();
   return useMutation({
+    retry: false,
+    onMutate: async () => {
+      const key = mobileQueryKeys.cart();
+      await queryClient.cancelQueries({ queryKey: key });
+      const previous = queryClient.getQueryData(key);
+      queryClient.setQueryData(key, optimisticCartRemoval(previous));
+      return { previous };
+    },
     mutationFn: async () =>
       !isCustomerSession(await getSession())
         ? anonymousCartResponse(await clearAnonymousCart())
         : remove("/cart"),
-    onSuccess: () =>
-      queryClient.invalidateQueries({ queryKey: mobileQueryKeys.cart() }),
+    onError: (_error, _input, context) => {
+      if (context?.previous !== undefined) queryClient.setQueryData(mobileQueryKeys.cart(), context.previous);
+    },
+    onSettled: () => { void queryClient.invalidateQueries({ queryKey: mobileQueryKeys.cart() }); },
   });
 }
 
@@ -1070,13 +1097,98 @@ export function useCheckoutPreviewMutation() {
       deliveryMethod: "HOME_DELIVERY" | "PARTNER_PICKUP";
       paymentMethod: "PREPAID" | "PAY_AT_HANDOVER";
       policyVersions: { TERMS: string; PRIVACY: string; RETURNS: string };
+      logisticsProviderId?: string;
+      couponCode?: string;
+      useCredits?: boolean;
     }) =>
-      post<any, typeof input>("/checkout/preview", {
+      post<any, Record<string, unknown>>("/checkout/preview", {
         addressId: input.addressId,
         deliveryMethod: input.deliveryMethod,
         paymentMethod: input.paymentMethod,
         policyVersions: input.policyVersions,
+        // The preview schema is .strict(), so only send what was chosen.
+        ...(input.logisticsProviderId ? { logisticsProviderId: input.logisticsProviderId } : {}),
+        ...(input.couponCode ? { couponCode: input.couponCode } : {}),
+        ...(input.useCredits ? { useCredits: true } : {}),
       }),
+  });
+}
+
+export type LogisticsProvider = {
+  id: string;
+  publicId?: string;
+  code: string;
+  name: string;
+  description?: string;
+  logoUrl?: string;
+  feeMinor: number;
+};
+
+export function useLogisticsProvidersQuery(enabled = true) {
+  return useQuery({
+    // The whole customer router sits behind requireCustomerIdentity, so this
+    // needs the session token — it is only ever read inside checkout anyway.
+    // `enabled` must stay gated on a resolved customer session: firing before
+    // the token is readable returns 403, and React Query caches that failure.
+    queryKey: mobileQueryKeys.logisticsProviders(),
+    queryFn: () => apiRequest<LogisticsProvider[]>("/logistics-providers"),
+    enabled,
+  });
+}
+
+export type CreditsSummary = {
+  balanceMinor: number;
+  capPercent: number;
+  currency: string;
+  history: {
+    id: string;
+    type: string;
+    amountMinor: number;
+    orderId?: string;
+    note?: string;
+    createdAt: string;
+  }[];
+};
+
+export function useCreditsQuery(enabled = true) {
+  return useQuery({
+    queryKey: mobileQueryKeys.credits(),
+    queryFn: () => apiRequest<CreditsSummary>("/credits"),
+    enabled,
+  });
+}
+
+export type ReferralSummary = {
+  code: string;
+  totalReferrals: number;
+  qualifiedReferrals: number;
+  pendingReferrals: number;
+  totalEarnedMinor: number;
+  referrals: {
+    id: string;
+    name: string;
+    status: "pending" | "qualified" | "cancelled";
+    bonusMinor: number;
+    qualifiedAt?: string;
+    createdAt: string;
+  }[];
+};
+
+export function useReferralsQuery(enabled = true) {
+  return useQuery({
+    queryKey: mobileQueryKeys.referrals(),
+    queryFn: () => apiRequest<ReferralSummary>("/referrals"),
+    enabled,
+  });
+}
+
+export function useValidateCouponMutation() {
+  return useMutation({
+    mutationFn: (input: { code: string; subtotalMinor: number; deliveryFeeMinor: number }) =>
+      post<{ code: string; type: string; discountMinor: number; appliesToDelivery: boolean }, typeof input>(
+        "/coupons/validate",
+        input,
+      ),
   });
 }
 

@@ -80,6 +80,7 @@ export async function completeSignup(input: {
   signupSessionToken: string;
   firstName: string;
   lastName: string;
+  referralCode?: string;
 }) {
   const body = { ...input, ...(await deviceMetadata()) };
   return apiRequest<AuthSession>('/auth/signup/complete', {

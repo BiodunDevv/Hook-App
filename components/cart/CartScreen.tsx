@@ -2,6 +2,7 @@ import { Ionicons } from "@expo/vector-icons";
 import { router } from "expo-router";
 import { useRef, useState } from "react";
 import {
+  AccessibilityInfo,
   Pressable,
   RefreshControl,
   ScrollView,
@@ -9,6 +10,7 @@ import {
   View,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
+import Animated, { FadeOut, LinearTransition, useReducedMotion } from 'react-native-reanimated';
 
 import { HookConfirmSheet } from "@/components/shared/HookConfirmSheet";
 import {
@@ -32,7 +34,8 @@ import {
   useUpdateCartItemMutation,
 } from "@/lib/mobile-api";
 import { isCustomerSession } from "@/lib/session";
-import { designTokens } from "@/constants/design-tokens";
+import { designTokens, centeredHeaderTextStyle } from "@/constants/design-tokens";
+import { useCartAddAnimation } from './useCartAddAnimation';
 
 const cartMoney = (minor: number) =>
   `₦${(minor / 100).toLocaleString("en-NG", { maximumFractionDigits: 2 })}`;
@@ -44,6 +47,9 @@ export function CartScreen({
   const cart = useCartQuery();
   const update = useUpdateCartItemMutation();
   const remove = useRemoveCartItemMutation();
+  const removalAnimation = useCartAddAnimation();
+  const removalLock = useRef(false);
+  const clearLock = useRef(false);
   const clear = useClearCartMutation();
   const session = useCustomerSessionQuery();
   const { openAuth } = useAuthSheet();
@@ -57,6 +63,8 @@ export function CartScreen({
   const [pendingRemoval, setPendingRemoval] = useState<{
     item: any;
     id: string;
+    source: View | null;
+    target: View | null;
   } | null>(null);
   const [refreshing, setRefreshing] = useState(false);
   const data = cart.data as any;
@@ -134,7 +142,11 @@ export function CartScreen({
 
   async function removeItem(item: any) {
     const itemId = cartItemIdentifier(item);
-    if (!itemId || pendingIds.has(itemId)) return;
+    if (!itemId || pendingIds.has(itemId) || removalLock.current || clearLock.current) return;
+    removalLock.current = true;
+    const animationSource = pendingRemoval;
+    setPendingRemoval(null);
+    const flight = removalAnimation.playBetween(item.product?.imageUrl || item.product?.media?.[0]?.url || item.product?.images?.[0], animationSource?.source || null, animationSource?.target || null);
     quantityQueue.current.delete(itemId);
     setPendingQuantities((current) => {
       const next = { ...current };
@@ -143,15 +155,18 @@ export function CartScreen({
     });
     setPendingIds((current) => new Set(current).add(itemId));
     try {
+      await flight; // Capture the native thumbnail before the optimistic row disappears.
       await quantityWorkers.current.get(itemId)?.catch(() => undefined);
       await remove.mutateAsync(itemId);
       setPendingRemoval(null);
-      toast.success("Item removed");
+      AccessibilityInfo.announceForAccessibility(`${item.product?.title || 'Item'} removed from cart`);
     } catch (error) {
+      removalAnimation.reverse();
       toast.error(
         error instanceof Error ? error.message : "Could not remove item",
       );
     } finally {
+      removalLock.current = false;
       setPendingIds((current) => {
         const next = new Set(current);
         next.delete(itemId);
@@ -159,20 +174,25 @@ export function CartScreen({
       });
     }
   }
-  function requestRemoveItem(item: any) {
+  function requestRemoveItem(item: any, source: View | null, target: View | null) {
+    if (removalLock.current || clearLock.current) return;
     const itemId = cartItemIdentifier(item);
     if (!itemId) return toast.error("This cart item cannot be removed yet");
-    setPendingRemoval({ item, id: itemId });
+    setPendingRemoval({ item, id: itemId, source, target });
   }
   async function clearCart() {
+    if (clearLock.current || removalLock.current || quantityWorkers.current.size) return;
+    clearLock.current = true;
+    setConfirmClear(false);
     try {
       await clear.mutateAsync();
-      setConfirmClear(false);
-      toast.success("Cart cleared");
+      AccessibilityInfo.announceForAccessibility('Cart cleared');
     } catch (error) {
       toast.error(
         error instanceof Error ? error.message : "Could not clear cart",
       );
+    } finally {
+      clearLock.current = false;
     }
   }
   function continueShopping() {
@@ -198,7 +218,7 @@ export function CartScreen({
   if (cart.isError) return <CartError retry={() => cart.refetch()} />;
   const items = getCartItems(data);
   const checkoutBlocked = items.some((item) => item.checkoutEligible === false);
-  if (!items.length) return <EmptyCart showBackButton={showBackButton} />;
+  if (!items.length) return <View ref={removalAnimation.containerRef} collapsable={false} style={{ flex: 1 }}><EmptyCart showBackButton={showBackButton} />{remove.isPending || clear.isPending ? <View accessibilityLiveRegion="polite" className="absolute inset-x-4 bottom-10 items-center"><Text className="rounded-full bg-[#FFF4CC] px-4 py-2 text-sm font-semibold text-[#4D3A00]">Updating cart…</Text></View> : null}{removalAnimation.overlay}</View>;
   const marketMap = new Map<
     string,
     { key: string; name: string; items: any[] }
@@ -230,6 +250,8 @@ export function CartScreen({
 
   return (
     <View
+      ref={removalAnimation.containerRef}
+      collapsable={false}
       className="flex-1"
       style={{
         paddingTop: insets.top,
@@ -238,7 +260,7 @@ export function CartScreen({
     >
       <View className="flex-row items-center justify-between px-4 py-3">
         {showBackButton ? <HookBackButton onPress={() => router.canGoBack() ? router.back() : router.replace('/(tabs)/discover')} /> : <View className="h-11 w-11" />}
-        <Text className="text-xl font-semibold">Your Cart</Text>
+        <Text style={centeredHeaderTextStyle}>Your Cart</Text>
         <View
           accessibilityLabel={`${unitCount} items in your cart`}
           className="h-8 min-w-8 items-center justify-center rounded-full bg-hook px-2"
@@ -288,7 +310,7 @@ export function CartScreen({
                     busy={Boolean(itemId && pendingIds.has(itemId))}
                     quantity={visibleQuantity(item)}
                     onChange={(quantity) => change(item, quantity)}
-                    onRemove={() => requestRemoveItem(item)}
+                    onRemove={(source, target) => requestRemoveItem(item, source, target)}
                   />
                 );
               })}
@@ -385,6 +407,7 @@ export function CartScreen({
         }
         onClose={() => setPendingRemoval(null)}
       />
+      {removalAnimation.overlay}
     </View>
   );
 }
@@ -400,8 +423,11 @@ function CartRow({
   busy: boolean;
   quantity: number;
   onChange: (quantity: number) => void;
-  onRemove: () => void;
+  onRemove: (source: View | null, target: View | null) => void;
 }) {
+  const reducedMotion = useReducedMotion();
+  const imageRef = useRef<View>(null);
+  const trashRef = useRef<View>(null);
   const product = item.product;
   const selectedColorValue =
     item.selectedVariants?.color || item.selectedVariants?.colour;
@@ -420,10 +446,14 @@ function CartRow({
   }
 
   return (
-    <View
+    <Animated.View
+      layout={LinearTransition.duration(reducedMotion ? 0 : 220)}
+      exiting={FadeOut.duration(reducedMotion ? 0 : 180)}
       className={`flex-row gap-3 rounded-[16px] bg-[#F1F1F3] p-2.5 ${item.checkoutEligible === false ? "border border-red-100" : ""}`}
     >
       <Pressable
+        ref={imageRef}
+        collapsable={false}
         accessibilityRole="button"
         accessibilityLabel={`View ${product?.title || "product"} details`}
         disabled={!productId}
@@ -448,10 +478,12 @@ function CartRow({
             {product?.title || "Unavailable product"}
           </Text>
           <Pressable
+            ref={trashRef}
+            collapsable={false}
             accessibilityRole="button"
             accessibilityLabel={`Remove ${product?.title || "product"}`}
             disabled={busy}
-            onPress={onRemove}
+            onPress={() => onRemove(imageRef.current, trashRef.current)}
             hitSlop={10}
           >
             <Ionicons name="trash" size={21} color="#FF2525" />
@@ -534,7 +566,7 @@ function CartRow({
           )}
         </View>
       </View>
-    </View>
+    </Animated.View>
   );
 }
 
@@ -573,7 +605,7 @@ function EmptyCart({ showBackButton }: { showBackButton: boolean }) {
     <View className="flex-1 bg-[#F4F4F5]" style={{ paddingTop: insets.top }}>
       <View className="flex-row items-center justify-between px-4 py-3">
         {showBackButton ? <HookBackButton onPress={() => router.canGoBack() ? router.back() : router.replace('/(tabs)/discover')} /> : <View className="h-11 w-11" />}
-        <Text className="text-xl font-black text-black">Your cart</Text>
+        <Text style={centeredHeaderTextStyle}>Your cart</Text>
         <View className="h-11 w-11" />
       </View>
       <View className="mx-4 mt-3 overflow-hidden rounded-[24px] bg-[#171717] p-5">

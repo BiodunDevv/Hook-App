@@ -1,4 +1,5 @@
 import { Ionicons } from "@expo/vector-icons";
+import { centeredHeaderTextStyle } from "@/constants/design-tokens";
 import { router } from "expo-router";
 import { FlatList, Pressable, RefreshControl, Text, View } from "react-native";
 import { useState } from "react";
@@ -41,7 +42,7 @@ export default function OrdersScreen() {
       <View className="px-4 pb-4 pt-3">
         <View className="flex-row items-center justify-between">
           <HookBackButton />
-          <Text className="text-[22px] font-black">Orders</Text>
+          <Text style={centeredHeaderTextStyle}>Orders</Text>
           <View className="h-11 w-11" />
         </View>
         <Text className="mt-4 text-sm text-[#777]">Payments, approval and delivery readiness</Text>

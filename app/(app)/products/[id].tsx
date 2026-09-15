@@ -2,6 +2,7 @@ import { Ionicons } from "@expo/vector-icons";
 import { router, useLocalSearchParams } from "expo-router";
 import { useEffect, useMemo, useRef, useState } from "react";
 import {
+  AccessibilityInfo,
   Pressable,
   RefreshControl,
   ScrollView,
@@ -9,9 +10,11 @@ import {
   View,
   useWindowDimensions,
 } from "react-native";
+import Animated, { useReducedMotion } from "react-native-reanimated";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { CartButton } from "@/components/cart/CartButton";
+import { useCartAddAnimation } from "@/components/cart/useCartAddAnimation";
 import { CatalogProductCard } from "@/components/marketplace/CatalogProductCard";
 import { NegotiationPrompt } from "@/components/marketplace/NegotiationPrompt";
 import { NegotiationOptionsSheet } from "@/components/negotiation/NegotiationOptionsSheet";
@@ -26,6 +29,7 @@ import { resolveColor } from "@/components/marketplace/product-colors";
 import { useAuthSheet } from "@/components/auth/AuthSheetProvider";
 import { isCustomerSession } from "@/lib/session";
 import { ApiError } from "@/lib/api";
+import { designTokens } from "@/constants/design-tokens";
 import {
   useAddCartItemMutation,
   useActiveNegotiationQuery,
@@ -55,6 +59,9 @@ export default function ProductDetailScreen() {
   }>();
   const insets = useSafeAreaInsets();
   const { width } = useWindowDimensions();
+  const scrollRef = useRef<ScrollView>(null);
+  const optionPositions = useRef({ details: 0, colour: 0, size: 0 });
+  const reducedMotion = useReducedMotion();
   const query = useProductQuery(id);
   const add = useAddCartItemMutation();
   const addLock = useRef(false);
@@ -63,12 +70,14 @@ export default function ProductDetailScreen() {
   const toggleLike = useToggleProductLikeMutation();
   const { openAuth } = useAuthSheet();
   const product = query.data;
+  const cartAnimation = useCartAddAnimation(product?.publicId);
   const [quantity, setQuantity] = useState(1);
   const [activeImage, setActiveImage] = useState(0);
   const [selectedColor, setSelectedColor] = useState<string>();
   const [selectedSize, setSelectedSize] = useState<string>();
   const [addedToCart, setAddedToCart] = useState(false);
   const [pendingCartAction, setPendingCartAction] = useState<'add' | 'buy' | null>(null);
+  const [cartError, setCartError] = useState<{ message: string; uncertain: boolean; buy: boolean } | null>(null);
   const [sizeGuideVisible, setSizeGuideVisible] = useState(false);
   const [negotiationOptionsVisible, setNegotiationOptionsVisible] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
@@ -210,6 +219,7 @@ export default function ProductDetailScreen() {
     }
     addLock.current = true;
     setPendingCartAction(redirectToCart ? 'buy' : 'add');
+    setCartError(null);
     setAddedToCart(false);
     if (addedFeedbackTimer.current) {
       clearTimeout(addedFeedbackTimer.current);
@@ -227,6 +237,9 @@ export default function ProductDetailScreen() {
       ...(quote?.id ? { quoteId: quote.id } : {}),
       optimisticProduct: product,
     };
+    const addedImageUri = images[activeImage]?.url || images[0]?.url;
+    // Acknowledge the tap immediately; this is not a saved-cart receipt.
+    if (!redirectToCart) void cartAnimation.play(addedImageUri);
 
     add.mutate(input, {
       onSuccess: () => {
@@ -234,14 +247,16 @@ export default function ProductDetailScreen() {
           router.push('/(app)/cart' as never);
         } else {
           setAddedToCart(true);
-          toast.success('Added to cart');
+          AccessibilityInfo.announceForAccessibility(`${product.title} added to cart`);
         }
       },
       onError: (error) => {
         setAddedToCart(false);
-        toast.error(
-          error instanceof Error ? error.message : "Could not add product",
-        );
+        cartAnimation.reverse();
+        const uncertain = !(error instanceof ApiError) || !error.status || error.status >= 500;
+        setCartError({ uncertain, buy: redirectToCart, message: uncertain
+          ? 'We could not confirm the save. Check your cart before adding again.'
+          : error.message || 'Could not add this item. Please try again.' });
       },
       onSettled: () => {
         addLock.current = false;
@@ -315,8 +330,9 @@ export default function ProductDetailScreen() {
     availableQuantity <= (product.lowStockThreshold ?? 5);
 
   return (
-    <View className="flex-1 bg-[#F1F1F3]">
+    <View ref={cartAnimation.containerRef} collapsable={false} className="flex-1 bg-[#F1F1F3]">
       <ScrollView
+        ref={scrollRef}
         alwaysBounceVertical
         contentInsetAdjustmentBehavior="never"
         keyboardShouldPersistTaps="handled"
@@ -335,6 +351,8 @@ export default function ProductDetailScreen() {
         }
       >
         <View
+          ref={cartAnimation.heroRef}
+          collapsable={false}
           className="relative overflow-hidden rounded-b-[22px] bg-white"
           style={{ height: heroHeight }}
         >
@@ -368,7 +386,7 @@ export default function ProductDetailScreen() {
           ))}
         </View>
 
-        <View className="gap-7 px-3 pb-4">
+        <View className="gap-7 px-3 pb-4" onLayout={(event) => { optionPositions.current.details = event.nativeEvent.layout.y; }}>
           {unavailable && !outOfStock ? (
             <View className="flex-row items-start rounded-[16px] border border-amber-200 bg-[#FFF8DB] p-4">
               <Ionicons name="time-outline" size={21} color="#8A6500" />
@@ -459,9 +477,9 @@ export default function ProductDetailScreen() {
           <ProductInformation key={product.publicId} name={product.title} description={product.description} />
 
           {colorOptions.length ? (
-            <View>
-              <Text className="text-sm text-black">
-                Color
+            <View onLayout={(event) => { optionPositions.current.colour = event.nativeEvent.layout.y; }}>
+              <Text className="text-sm font-semibold text-black">
+                Colour
                     {!selectedColor ? (
                       <Text className="text-[#C53B35]"> *</Text>
                     ) : null}
@@ -474,6 +492,7 @@ export default function ProductDetailScreen() {
                     <Pressable
                       key={value}
                       accessibilityRole="button"
+                      accessibilityLabel={`Select ${displayColor.name} colour`}
                       accessibilityState={{ selected }}
                       onPress={() => chooseColor(value)}
                       className={`flex-row items-center rounded-full border px-2.5 py-1.5 ${selected ? "border-black" : "border-black/25"}`}
@@ -488,9 +507,9 @@ export default function ProductDetailScreen() {
           ) : null}
 
           {sizeOptions.length ? (
-            <View>
+            <View onLayout={(event) => { optionPositions.current.size = event.nativeEvent.layout.y; }}>
                   <View className="flex-row items-center justify-between">
-                <Text className="text-sm text-black">
+                <Text className="text-sm font-semibold text-black">
                   Size
                       {!selectedSize ? (
                         <Text className="text-[#C53B35]"> *</Text>
@@ -532,6 +551,7 @@ export default function ProductDetailScreen() {
                         <Pressable
                           key={size}
                           accessibilityRole="button"
+                          accessibilityLabel={`Select size ${size}`}
                           accessibilityState={{ selected, disabled: !enabled }}
                           disabled={!enabled}
                           onPress={() => chooseSize(size)}
@@ -607,30 +627,40 @@ export default function ProductDetailScreen() {
               color={isLiked ? "#FFC809" : "#111"}
             />
           </Pressable>
-          <CartButton tone="white" />
+          <Animated.View style={cartAnimation.cartAnimatedStyle}>
+            <View ref={cartAnimation.cartRef} collapsable={false}><CartButton tone="white" /></View>
+          </Animated.View>
         </View>
       </View>
 
       {variantRequired && !unavailable ? (
         <View
-          pointerEvents="none"
           className="absolute inset-x-0 bottom-0 items-center px-4 pt-2"
           style={{ paddingBottom: Math.max(insets.bottom, 8) }}
         >
-          <Text className="text-center text-[13px] font-semibold text-[#66666B]">
-            {selectionPrompt}
-          </Text>
+          <Pressable accessibilityRole="button" accessibilityLabel={selectionPrompt} accessibilityHint="Scrolls to the required product options" accessibilityLiveRegion="polite"
+            onPress={() => {
+              const section = colorOptions.length && !selectedColor ? 'colour' : sizeOptions.length && !selectedSize ? 'size' : colorOptions.length ? 'colour' : 'size';
+              scrollRef.current?.scrollTo({ y: Math.max(0, optionPositions.current.details + optionPositions.current[section] - insets.top - 72), animated: !reducedMotion });
+            }}
+            className="min-h-11 max-w-full flex-row items-center gap-2 rounded-2xl border border-[#E3C458] bg-[#FFF4CC] px-4 py-3 active:opacity-80">
+            <Ionicons name={colorOptions.length && !selectedColor ? 'color-palette-outline' : 'resize-outline'} size={19} color="#614A00" />
+            <Text className="flex-shrink text-center text-[14px] font-bold leading-5 text-[#4D3A00]">{selectionPrompt}</Text>
+            <Ionicons name="chevron-down" size={16} color="#614A00" />
+          </Pressable>
         </View>
       ) : (
         <BottomActionBar>
-          <BottomActionButton
-            label={addedToCart ? "Added" : unavailable ? "Unavailable" : "Add to cart"}
-            icon={addedToCart ? "checkmark-circle" : undefined}
-            disabled={unavailable || pendingCartAction !== null}
-            loading={pendingCartAction === 'add'}
-            onPress={() => void addToCart(false)}
-            tone="secondary"
-          />
+          <View ref={cartAnimation.triggerRef} collapsable={false} style={{ flex: 1, height: designTokens.control.actionHeight }}>
+            <BottomActionButton
+              label={pendingCartAction === 'add' ? "Adding…" : addedToCart ? "Added" : unavailable ? "Unavailable" : "Add to cart"}
+              icon={addedToCart ? "checkmark-circle" : undefined}
+              disabled={unavailable || pendingCartAction !== null}
+              busy={pendingCartAction === 'add'}
+              onPress={() => void addToCart(false)}
+              tone="secondary"
+            />
+          </View>
           <BottomActionButton
             label={unavailable ? "Check back soon" : "Buy now"}
             disabled={unavailable || pendingCartAction !== null}
@@ -640,6 +670,15 @@ export default function ProductDetailScreen() {
           />
         </BottomActionBar>
       )}
+      {cartError ? (
+        <View accessibilityLiveRegion="polite" className="absolute inset-x-4 rounded-2xl border border-[#E7C3BD] bg-[#FFF0ED] px-4 py-3" style={{ bottom: Math.max(insets.bottom, 8) + designTokens.control.actionHeight + 16 }}>
+          <Text className="text-[13px] leading-5 text-[#7D2C20]">{cartError.message}</Text>
+          <Pressable accessibilityRole="button" className="mt-1 min-h-11 justify-center" onPress={() => cartError.uncertain ? router.push('/(app)/cart' as never) : addToCart(cartError.buy)}>
+            <Text className="text-[13px] font-bold text-[#7D2C20]">{cartError.uncertain ? 'Check cart' : 'Try again'}</Text>
+          </Pressable>
+        </View>
+      ) : null}
+      {cartAnimation.overlay}
 
       {negotiationOptionsVisible ? <NegotiationOptionsSheet
         visible product={product} quantity={quantity} initialVariantId={selectedVariant?.publicId}

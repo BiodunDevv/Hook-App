@@ -6,7 +6,7 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { BackendUnavailableScreen } from "@/components/shared/BackendUnavailableScreen";
 import { checkHookHealth } from "@/lib/health";
-import { refreshSession } from "@/lib/api";
+import { resumeSession as refreshSession } from "@/lib/api";
 import { getOnboardingComplete, getPendingSignup, getSession } from "@/lib/session";
 
 const SPLASH_DELAY = 900;

@@ -17,6 +17,7 @@ export type HookUser = {
 export type AuthSession = {
   accessToken: string;
   refreshToken: string;
+  accessExpiresAt?: string;
   user: HookUser;
 };
 
