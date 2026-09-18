@@ -6,10 +6,11 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { designTokens } from "@/constants/design-tokens";
 
 /** Fixed chrome with Gorhom-integrated scrolling and keyboard handling. */
-export function CheckoutSheet({ visible, onClose, title, children }: PropsWithChildren<{
+export function CheckoutSheet({ visible, onClose, title, children, fullScreen = false }: PropsWithChildren<{
   visible: boolean;
   onClose: () => void;
   title: string;
+  fullScreen?: boolean;
 }>) {
   const sheet = useRef<BottomSheet>(null);
   const visibleRef = useRef(visible);
@@ -31,9 +32,11 @@ export function CheckoutSheet({ visible, onClose, title, children }: PropsWithCh
     <BottomSheet
       ref={sheet}
       index={visible ? 0 : -1}
-      snapPoints={["88%"]}
+      snapPoints={[fullScreen ? "100%" : "88%"]}
       enableDynamicSizing={false}
       enablePanDownToClose
+      enableContentPanningGesture
+      enableHandlePanningGesture
       topInset={insets.top + 8}
       keyboardBehavior="interactive"
       keyboardBlurBehavior="restore"
@@ -43,14 +46,14 @@ export function CheckoutSheet({ visible, onClose, title, children }: PropsWithCh
       handleIndicatorStyle={{ backgroundColor: "#C8C8CC" }}
       onChange={(index) => { if (index === -1 && visibleRef.current) onClose(); }}
     >
-      <View accessibilityViewIsModal style={{ flex: 1 }}>
+      <View accessibilityViewIsModal style={{ flex: 1, minHeight: 0 }}>
         <View style={{ paddingHorizontal: 20, paddingBottom: 16, flexDirection: "row", alignItems: "center", gap: 12 }}>
           <Text accessibilityRole="header" style={{ flex: 1, fontFamily: "NunitoSans-Bold", fontSize: 20, color: designTokens.color.ink }}>{title}</Text>
           <Pressable accessibilityRole="button" accessibilityLabel="Close" onPress={onClose} style={{ width: 44, height: 44, borderRadius: 22, alignItems: "center", justifyContent: "center", backgroundColor: "white" }}>
             <Ionicons name="close" size={24} color={designTokens.color.ink} />
           </Pressable>
         </View>
-        {children}
+        <View style={{ flex: 1, minHeight: 0 }}>{children}</View>
       </View>
     </BottomSheet>
   );

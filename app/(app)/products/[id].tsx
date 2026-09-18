@@ -396,7 +396,7 @@ export default function ProductDetailScreen() {
                 </Text>
                 <Text className="mt-1 text-[12px] leading-5 text-[#725A0A]">
                   {product.availabilityNote ||
-                    "A Hook Market Associate is confirming availability. Keep it saved and check back soon."}
+                    "Hook is confirming availability. Keep it saved and check back soon."}
                 </Text>
               </View>
             </View>
@@ -571,7 +571,7 @@ export default function ProductDetailScreen() {
 
           <Text className="text-xs text-black/55">
             {unavailable
-              ? "Purchase actions will return after Market Associate confirmation."
+              ? "Purchase actions will return once Hook confirms availability."
               : product.market?.name
                 ? `Available from ${product.market.name}`
                 : "Available from a verified Hook Market"}

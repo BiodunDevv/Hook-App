@@ -189,7 +189,7 @@ export default function ProfileScreen() {
           <ProfileSection title="Rewards">
             <ProfileRow
               icon="wallet"
-              label="Hook Credits"
+              label="Hook Coin"
               value={creditsLabel}
               onPress={() => router.push("/credits" as never)}
             />
@@ -206,6 +206,7 @@ export default function ProfileScreen() {
             <ProfileRow icon="call" label="Help & support" onPress={() => toast.info("Hook support", "Support options are coming soon.")} neutral />
             <ProfileRow icon="document-text" label="Terms of Service" onPress={() => router.push("/legal/terms" as never)} neutral />
             <ProfileRow icon="shield-checkmark" label="Privacy Policy" onPress={() => router.push("/legal/privacy" as never)} neutral />
+            <ProfileRow icon="refresh-circle" label="Returns Policy" onPress={() => router.push("/legal/returns" as never)} neutral />
           </ProfileSection>
 
           <ProfileSection title="App information">

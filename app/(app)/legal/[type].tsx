@@ -69,13 +69,14 @@ function LegalBody({ html }: { html: string }) {
 const TITLES: Record<string, string> = {
   terms: "Terms of Service",
   privacy: "Privacy Policy",
+  returns: "Returns Policy",
 };
 
 export default function LegalContentScreen() {
   const insets = useSafeAreaInsets();
   const { type, from } = useLocalSearchParams<{ type: string; from?: string }>();
   const { openAuth } = useAuthSheet();
-  const legalType = type === "privacy" ? "privacy" : "terms";
+  const legalType = type === "privacy" || type === "returns" ? type : "terms";
   const query = useLegalContentQuery(legalType);
   const title = query.data?.title || TITLES[legalType];
 

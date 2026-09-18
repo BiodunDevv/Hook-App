@@ -9,6 +9,7 @@ import { HookLoader } from '@/components/shared/HookLoader';
 import { HookBackButton } from '@/components/shared/HookBackButton';
 import { toast } from '@/components/shared/toast';
 import { type AccountDevice, listDevices, revokeDevice, revokeOtherDevices } from '@/lib/auth-api';
+import { screenPadding } from "@/constants/design-tokens";
 
 export default function DevicesScreen() {
   const insets = useSafeAreaInsets();
@@ -49,7 +50,7 @@ export default function DevicesScreen() {
   return (
     <View className="flex-1 bg-[#F5F5F5]">
       <ScrollView
-        contentContainerStyle={{ paddingTop: insets.top + 12, paddingHorizontal: 18, paddingBottom: insets.bottom + 40 }}
+        contentContainerStyle={{ paddingTop: insets.top + 12, paddingHorizontal: screenPadding, paddingBottom: insets.bottom + 40 }}
         showsVerticalScrollIndicator={false}
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => void refreshDevices()} tintColor="#111111" />}
       >

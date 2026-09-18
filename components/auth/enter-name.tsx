@@ -177,7 +177,7 @@ export function EnterName({ email }: { email: string }) {
                 returnKeyType="done"
               />
               <Text style={{ color: "#414040", fontSize: 12, marginTop: 6 }}>
-                Joined through a friend? Enter their code to get ₦300 in Hook Credits.
+                Joined through a friend? Enter their code to get ₦300 in Hook Coin.
               </Text>
             </View>
 

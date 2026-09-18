@@ -300,14 +300,14 @@ export function useProductQuery(id?: string) {
 }
 
 export interface LegalContent {
-  type: "terms" | "privacy";
+  type: "terms" | "privacy" | "returns";
   title: string;
   bodyHtml: string;
   version: number;
   effectiveDate: string | null;
 }
 
-export function useLegalContentQuery(type: "terms" | "privacy") {
+export function useLegalContentQuery(type: "terms" | "privacy" | "returns") {
   return useQuery({
     queryKey: ["mobile", "legal", type],
     queryFn: () =>
@@ -1047,10 +1047,20 @@ export function useAddressesQuery() {
     queryFn: () => apiRequest<any[]>("/addresses"),
   });
 }
+export type CommerceConfig = {
+  currency: string;
+  podEnabled: boolean;
+  podPaused: boolean;
+  policyVersions: { TERMS?: string; PRIVACY?: string; RETURNS?: string };
+  orderEarnEnabled: boolean;
+  orderEarnPercent: number;
+  orderEarnMaxMinor: number;
+};
+
 export function useCommerceConfigQuery() {
   return useQuery({
     queryKey: mobileQueryKeys.commerceConfig(),
-    queryFn: () => apiRequest<any>("/commerce/config"),
+    queryFn: () => apiRequest<CommerceConfig>("/commerce/config"),
   });
 }
 export function useCreateAddressMutation() {

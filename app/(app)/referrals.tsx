@@ -8,6 +8,7 @@ import { HookPageHeader } from "@/components/shared/HookPageHeader";
 import { HookLoader } from "@/components/shared/HookLoader";
 import { toast } from "@/components/shared/toast";
 import { useReferralsQuery } from "@/lib/mobile-api";
+import { screenPadding } from "@/constants/design-tokens";
 
 function naira(minor: number) {
   return `₦${Math.round(Number(minor || 0) / 100).toLocaleString("en-NG")}`;
@@ -53,7 +54,7 @@ export default function ReferralsScreen() {
     if (!code) return;
     try {
     await Share.share({
-      message: `Shop Nigerian markets with Hook. Use my code ${code} when you sign up and we both earn Hook Credits.`,
+      message: `Shop Nigerian markets with Hook. Use my code ${code} when you sign up and we both earn Hook Coin.`,
     });
     } catch {
       toast.error("Couldn’t open sharing. Please try again.");
@@ -63,7 +64,7 @@ export default function ReferralsScreen() {
   return (
     <View style={{ flex: 1, backgroundColor: "#F1F1F3" }}>
       <ScrollView
-        contentContainerStyle={{ paddingTop: insets.top + 12, paddingHorizontal: 18, paddingBottom: insets.bottom + 40 }}
+        contentContainerStyle={{ paddingTop: insets.top + 12, paddingHorizontal: screenPadding, paddingBottom: insets.bottom + 40 }}
         showsVerticalScrollIndicator={false}
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => void refresh()} tintColor="#111111" />}
       >
@@ -73,7 +74,7 @@ export default function ReferralsScreen() {
           <Ionicons name="gift" size={26} color="#111" />
           <Text className="mt-4 text-lg font-black text-black">Give ₦300, get ₦1,000</Text>
           <Text className="mt-1 text-sm leading-5 text-black/60">
-            Your friend gets ₦300 in credits the moment they join with your code. You earn ₦1,000 once they complete
+            Your friend gets ₦300 in Hook Coin the moment they join with your code. You earn ₦1,000 once they complete
             their first order.
           </Text>
         </View>

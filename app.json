@@ -5,17 +5,25 @@
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/images/app-icon.png",
-    "scheme": [
-      "hook",
-      "com.googleusercontent.apps.970939309798-beud2kvciukbrbpau74oosnmlf97de2r"
-    ],
+    "scheme": "hook",
     "userInterfaceStyle": "light",
     "ios": {
       "bundleIdentifier": "com.biodun42.hook",
       "supportsTablet": true,
       "usesAppleSignIn": true,
       "infoPlist": {
-        "NSFaceIDUsageDescription": "Hook uses Face ID to protect your account on this device."
+        "NSFaceIDUsageDescription": "Hook uses Face ID to protect your account on this device.",
+        "UIApplicationSceneManifest": {
+          "UIApplicationSupportsMultipleScenes": false,
+          "UISceneConfigurations": {
+            "UIWindowSceneSessionRoleApplication": [
+              {
+                "UISceneConfigurationName": "Default Configuration",
+                "UISceneDelegateClassName": "$(PRODUCT_MODULE_NAME).SceneDelegate"
+              }
+            ]
+          }
+        }
       }
     },
     "android": {

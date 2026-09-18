@@ -38,6 +38,25 @@ export const designTokens = {
   },
 } as const;
 
+/**
+ * The single horizontal gutter every screen uses.
+ *
+ * Screens had been setting their own value — 16 here, 18 there, 24 in places —
+ * so headers and content drifted out of alignment between (and sometimes
+ * within) pages. Import `screenPadding` rather than hardcoding a number.
+ */
+export const screenPadding = designTokens.spacing.lg;
+
+/** Content gutter for a screen's scroll body. Spread into contentContainerStyle. */
+export const screenContentStyle = {
+  paddingHorizontal: screenPadding,
+} as const;
+
+/** Matches screenContentStyle for headers and other non-scrolling sections. */
+export const screenHeaderStyle = {
+  paddingHorizontal: screenPadding,
+} as const;
+
 export const centeredHeaderTextStyle = {
   fontSize: designTokens.typography.headerSize,
   lineHeight: designTokens.typography.headerLineHeight,

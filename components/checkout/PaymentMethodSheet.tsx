@@ -9,13 +9,6 @@ function naira(minor: number) {
   return `₦${Math.round(Number(minor || 0) / 100).toLocaleString("en-NG")}`;
 }
 
-const PAY_NOW_BENEFITS: { icon: React.ComponentProps<typeof Ionicons>["name"]; label: string }[] = [
-  { icon: "shield-checkmark-outline", label: "Hook Protection" },
-  { icon: "flash-outline", label: "Faster processing" },
-  { icon: "gift-outline", label: "Earn ₦300 Hook Credits" },
-  { icon: "remove-outline", label: "No POD handling fee" },
-];
-
 const WHY_PAY_NOW = [
   "Your item was recently verified",
   "Real product photos are shown above",
@@ -28,6 +21,7 @@ export function PaymentMethodSheet({
   creditBalanceMinor,
   useCredits,
   creditsAppliedMinor,
+  estimatedEarnMinor,
   payNowTotalMinor,
   podTotalMinor,
   podPaused,
@@ -39,6 +33,7 @@ export function PaymentMethodSheet({
   creditBalanceMinor: number;
   useCredits: boolean;
   creditsAppliedMinor: number;
+  estimatedEarnMinor: number;
   payNowTotalMinor: number;
   podTotalMinor: number;
   podPaused: boolean;
@@ -48,35 +43,60 @@ export function PaymentMethodSheet({
 }) {
   const hasCredits = creditBalanceMinor > 0;
   const insets = useSafeAreaInsets();
+  const payNowBenefits: { icon: React.ComponentProps<typeof Ionicons>["name"]; label: string }[] = [
+    { icon: "shield-checkmark-outline", label: "Hook Protection" },
+    { icon: "flash-outline", label: "Faster processing" },
+    ...(estimatedEarnMinor > 0
+      ? [{ icon: "gift-outline" as const, label: `Earn ${naira(estimatedEarnMinor)} Hook Coin` }]
+      : []),
+    { icon: "remove-outline", label: "No POD handling fee" },
+  ];
 
   return (
-    <CheckoutSheet visible={visible} onClose={onClose} title="How do you want to pay?">
-      <ScrollView style={{ flex: 1 }} contentContainerStyle={{ paddingHorizontal: 20, paddingBottom: insets.bottom + 24 }} showsVerticalScrollIndicator={false}>
+    <CheckoutSheet visible={visible} onClose={onClose} title="How do you want to pay?" fullScreen>
+      <ScrollView
+        style={{ flex: 1 }}
+        contentContainerStyle={{ paddingHorizontal: 20, paddingBottom: Math.max(insets.bottom, 24) + 64 }}
+        showsVerticalScrollIndicator={false}
+        nestedScrollEnabled
+        keyboardShouldPersistTaps="handled"
+        contentInsetAdjustmentBehavior="never"
+        bounces
+      >
         <View style={{ borderRadius: 18, backgroundColor: "#111", padding: 20 }}>
           <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: 12 }}>
             <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
               <Ionicons name="wallet-outline" size={20} color="#FAFAFA" />
-              <Text style={{ fontSize: 15, color: "white" }}>Hook Credits</Text>
+              <Text style={{ fontSize: 15, color: "white" }}>Hook Coin</Text>
             </View>
-            <Text style={{ fontSize: 18, color: "#FFC809", fontFamily: "NunitoSans-Bold" }}>{naira(creditBalanceMinor)}</Text>
+            <View style={{ alignItems: "flex-end", gap: 4 }}>
+              <Text style={{ fontSize: 18, color: "#FFC809", fontFamily: "NunitoSans-Bold" }}>{naira(creditBalanceMinor)}</Text>
+              {hasCredits && useCredits ? (
+                <View style={{ borderRadius: 999, backgroundColor: "#FFC809", paddingHorizontal: 8, paddingVertical: 2 }}>
+                  <Text style={{ fontSize: 9, fontFamily: "NunitoSans-Bold", letterSpacing: 0.5, color: "#111" }}>AUTO ON</Text>
+                </View>
+              ) : null}
+            </View>
           </View>
           <View style={{ marginTop: 16, flexDirection: "row", alignItems: "center", gap: 12, borderRadius: 16, padding: 12, backgroundColor: "#292929" }}>
             <View style={{ flex: 1 }}>
-              <Text style={{ color: "white", fontSize: 14 }}>Use credits for this order</Text>
+              <Text style={{ color: "white", fontSize: 14, fontFamily: "NunitoSans-Bold" }}>
+                {hasCredits && useCredits ? "Applied automatically" : "Use Hook Coin for this order"}
+              </Text>
               {useCredits && creditsAppliedMinor > 0 ? (
                 <Text style={{ marginTop: 4, fontSize: 12, lineHeight: 18, color: "#DDD" }}>
-                  {naira(creditsAppliedMinor)} will be applied
+                  {naira(creditsAppliedMinor)} will reduce this order total
                 </Text>
               ) : !hasCredits ? (
-                <Text style={{ marginTop: 4, fontSize: 12, lineHeight: 18, color: "#DDD" }}>Earn credits by referring friends</Text>
+                <Text style={{ marginTop: 4, fontSize: 12, lineHeight: 18, color: "#DDD" }}>Earn Hook Coin by referring friends</Text>
               ) : (
                 <Text style={{ marginTop: 4, fontSize: 12, lineHeight: 18, color: "#DDD" }}>
-                  Credits apply when you pay now
+                  Hook Coin is paused for this order
                 </Text>
               )}
             </View>
             <Switch
-              accessibilityLabel="Use Hook credits for this order"
+              accessibilityLabel="Automatically apply Hook Coin to this order"
               value={useCredits}
               disabled={!hasCredits}
               onValueChange={onToggleCredits}
@@ -104,7 +124,7 @@ export function PaymentMethodSheet({
           <Text style={{ marginLeft: 32, fontSize: 24, fontFamily: "NunitoSans-Black", color: "#111" }}>{naira(payNowTotalMinor)}</Text>
 
           <View style={{ marginLeft: 32, gap: 12 }}>
-            {PAY_NOW_BENEFITS.map((benefit) => (
+            {payNowBenefits.map((benefit) => (
               <View key={benefit.label} style={{ flexDirection: "row", alignItems: "center", gap: 12 }}>
                 <Ionicons name={benefit.icon} size={16} color="#FFC809" />
                 <Text style={{ flex: 1, fontSize: 14, lineHeight: 20, color: "#111" }}>{benefit.label}</Text>

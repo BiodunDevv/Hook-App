@@ -202,7 +202,7 @@ export function CartScreen({
     if (getCartItems(data).some((item) => item.checkoutEligible === false)) {
       toast.info(
         "Some products need confirmation",
-        "Remove unavailable products or check back after a Market Associate confirms them.",
+        "Remove unavailable products or check back once Hook confirms them.",
       );
       return;
     }
@@ -345,8 +345,8 @@ export function CartScreen({
               accessibilityRole="alert"
               className="text-xs leading-5 text-[#A2392C]"
             >
-              Remove unavailable products or wait for Market Associate
-              confirmation before checkout.
+              Remove unavailable products or wait for Hook to confirm them
+              before checkout.
             </Text>
           ) : null}
           <View className="flex-row items-center justify-between">
@@ -533,7 +533,7 @@ function CartRow({
           {item.checkoutEligible === false ? (
             <View className="flex-1 rounded-lg bg-[#FFF8DB] px-2.5 py-2">
               <Text className="text-[11px] font-bold text-[#725A0A]">
-                Market Associate confirmation required
+                Hook is confirming availability
               </Text>
               <Text className="mt-0.5 text-[9px] text-[#8A7440]">
                 Keep it here and check back soon.

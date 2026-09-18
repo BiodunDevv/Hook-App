@@ -3,7 +3,7 @@ import * as Crypto from "expo-crypto";
 import * as WebBrowser from "expo-web-browser";
 import { setPaymentFlowActive } from "@/lib/payment-flow";
 import { router } from "expo-router";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Pressable, ScrollView, Text, TextInput, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
@@ -38,6 +38,7 @@ import {
   type LogisticsProvider,
 } from "@/lib/mobile-api";
 import { isCustomerSession } from "@/lib/session";
+import { calculateHookCoinEarnMinor } from "@/lib/hook-coin";
 
 const VAT_RATE = 0.075;
 
@@ -61,6 +62,7 @@ export default function CheckoutScreen() {
   const [deliveryNote, setDeliveryNote] = useState("");
   const [provider, setProvider] = useState<LogisticsProvider>();
   const [useCredits, setUseCredits] = useState(false);
+  const creditPreferenceTouched = useRef(false);
   const [couponInput, setCouponInput] = useState("");
   const [coupon, setCoupon] = useState<{ code: string; discountMinor: number; appliesToDelivery: boolean }>();
   const [acceptedPolicies, setAcceptedPolicies] = useState(false);
@@ -77,6 +79,24 @@ export default function CheckoutScreen() {
   const cartItems = getCartItems(cart.data);
   const providers = logistics.data || [];
   const podPaused = Boolean((config.data as { podPaused?: boolean } | undefined)?.podPaused);
+
+  // Hook Coin is applied by default as soon as the wallet is available. A
+  // customer's explicit choice is then preserved for the rest of this
+  // checkout, even if the wallet query refreshes in the background.
+  useEffect(() => {
+    if (!credits.isSuccess) return;
+    const hasSpendableBalance = Number(credits.data?.balanceMinor || 0) > 0;
+    if (!hasSpendableBalance) {
+      setUseCredits(false);
+      return;
+    }
+    if (!creditPreferenceTouched.current) setUseCredits(true);
+  }, [credits.data?.balanceMinor, credits.isSuccess]);
+
+  function handleToggleCredits(next: boolean) {
+    creditPreferenceTouched.current = true;
+    setUseCredits(next);
+  }
 
   // Mirrors CheckoutService.calculateMoney so the figures shown here match the
   // server's quote. The server stays the source of truth — this is only so the
@@ -112,6 +132,7 @@ export default function CheckoutScreen() {
   }, [cartItems, provider, coupon, useCredits, credits.data]);
 
   const busy = preview.isPending || confirm.isPending || createPaymentLink.isPending;
+  const estimatedEarnMinor = calculateHookCoinEarnMinor(money.subtotalMinor, config.data);
 
   if (!session.isLoading && !signedIn) {
     return (
@@ -168,6 +189,11 @@ export default function CheckoutScreen() {
     const policyVersions = config.data?.policyVersions;
     if (!policyVersions?.TERMS || !policyVersions?.PRIVACY || !policyVersions?.RETURNS)
       return toast.error("Checkout policies are temporarily unavailable");
+    const acceptedPolicyVersions = {
+      TERMS: policyVersions.TERMS,
+      PRIVACY: policyVersions.PRIVACY,
+      RETURNS: policyVersions.RETURNS,
+    };
     if (!acceptedPolicies) return toast.error("Accept the current Hook policies to continue");
 
     try {
@@ -176,7 +202,7 @@ export default function CheckoutScreen() {
         addressId: selectedAddress.publicId,
         deliveryMethod: "HOME_DELIVERY",
         paymentMethod: "PREPAID",
-        policyVersions,
+        policyVersions: acceptedPolicyVersions,
         logisticsProviderId: provider.publicId || provider.id,
         couponCode: coupon?.code,
         useCredits,
@@ -241,6 +267,11 @@ export default function CheckoutScreen() {
       || selectedAddress.label
       || selectedAddress.recipientName
     : undefined;
+  const readyForPayment = Boolean(selectedAddress && provider && paymentChosen);
+
+  function openPolicy(type: "terms" | "privacy" | "returns") {
+    router.push(`/legal/${type}?from=checkout` as never);
+  }
 
   return (
     <View style={{ flex: 1, backgroundColor: "#F1F1F3", paddingTop: insets.top }}>
@@ -249,7 +280,12 @@ export default function CheckoutScreen() {
       </View>
       <ScrollView
         style={{ flex: 1 }}
-        contentContainerStyle={{ padding: 16, paddingBottom: insets.bottom + 140 }}
+        contentContainerStyle={{
+          padding: 16,
+          // Clears the 52pt floating action without leaving a large empty
+          // band after the consent card on taller phones.
+          paddingBottom: Math.max(insets.bottom, 12) + 72,
+        }}
         showsVerticalScrollIndicator={false}
         keyboardShouldPersistTaps="handled"
         automaticallyAdjustKeyboardInsets
@@ -277,6 +313,25 @@ export default function CheckoutScreen() {
         <View style={{ marginTop: 24, gap: 10 }}>
           <Text className="text-base font-medium text-black">Payment</Text>
           <CheckoutRow placeholder="Choose payment method" value={paymentChosen ? "Pay now" : undefined} onPress={() => setSheet("payment")} />
+          {money.creditsAppliedMinor > 0 ? (
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel={`Hook Coin is on. ${Math.round(money.creditsAppliedMinor / 100).toLocaleString("en-NG")} naira will be applied automatically. Tap to change.`}
+              onPress={() => setSheet("payment")}
+              style={{ flexDirection: "row", alignItems: "center", gap: 10, borderRadius: 14, borderWidth: 1, borderColor: "#E9B900", backgroundColor: "#FFF9E5", paddingHorizontal: 14, paddingVertical: 11 }}
+            >
+              <View style={{ height: 28, width: 28, alignItems: "center", justifyContent: "center", borderRadius: 14, backgroundColor: "#FFC809" }}>
+                <Ionicons name="wallet-outline" size={16} color="#111" />
+              </View>
+              <View style={{ flex: 1 }}>
+                <Text style={{ fontSize: 13, fontFamily: "NunitoSans-Bold", color: "#111" }}>Hook Coin is on</Text>
+                <Text style={{ marginTop: 1, fontSize: 12, lineHeight: 17, color: "#666" }}>
+                  ₦{Math.round(money.creditsAppliedMinor / 100).toLocaleString("en-NG")} will be used automatically.
+                </Text>
+              </View>
+              <Text style={{ fontSize: 12, fontFamily: "NunitoSans-Bold", color: "#7A6200" }}>Change</Text>
+            </Pressable>
+          ) : null}
         </View>
 
         <View style={{ marginTop: 24, gap: 10 }}>
@@ -310,7 +365,10 @@ export default function CheckoutScreen() {
         </View>
 
         <View style={{ marginTop: 24 }}>
-          <ReviewOrderSection items={cartItems} />
+          <ReviewOrderSection
+            items={cartItems}
+            onEditOrder={() => router.push("/(app)/cart" as never)}
+          />
         </View>
 
         <View style={{ marginTop: 24 }}>
@@ -325,21 +383,37 @@ export default function CheckoutScreen() {
           />
         </View>
 
-        <Pressable
-          accessibilityRole="checkbox"
-          accessibilityState={{ checked: acceptedPolicies }}
-          onPress={() => setAcceptedPolicies((current) => !current)}
-          className="mt-7 flex-row items-start gap-3"
-        >
-          <View
-            className={`mt-0.5 h-5 w-5 items-center justify-center rounded border ${acceptedPolicies ? "border-hook bg-hook" : "border-black/25 bg-white"}`}
+        <View style={{ marginTop: 28, borderRadius: 18, borderWidth: 1, borderColor: acceptedPolicies ? "#E4B500" : "#E1E1E4", backgroundColor: acceptedPolicies ? "#FFF9E5" : "white", padding: 16 }}>
+          <Pressable
+            accessibilityRole="checkbox"
+            accessibilityState={{ checked: acceptedPolicies }}
+            accessibilityLabel="Accept Hook checkout policies"
+            onPress={() => setAcceptedPolicies((current) => !current)}
+            style={{ minHeight: 44, flexDirection: "row", alignItems: "center", gap: 12 }}
           >
-            {acceptedPolicies ? <Ionicons name="checkmark" size={14} color="#111" /> : null}
+            <View style={{ height: 26, width: 26, alignItems: "center", justifyContent: "center", borderRadius: 8, borderWidth: 1.5, borderColor: acceptedPolicies ? "#111" : "#B8B8BD", backgroundColor: acceptedPolicies ? "#FFC809" : "#F7F7F8" }}>
+              {acceptedPolicies ? <Ionicons name="checkmark" size={17} color="#111" /> : null}
+            </View>
+            <View style={{ flex: 1 }}>
+              <Text style={{ fontSize: 14, fontFamily: "NunitoSans-Bold", color: "#111" }}>I agree to Hook&apos;s checkout policies</Text>
+              <Text style={{ marginTop: 2, fontSize: 12, lineHeight: 17, color: "#666" }}>Required before secure payment.</Text>
+            </View>
+          </Pressable>
+          <View style={{ marginTop: 10, flexDirection: "row", flexWrap: "wrap", alignItems: "center", gap: 5, borderTopWidth: 1, borderTopColor: "rgba(17,17,17,0.08)", paddingTop: 12 }}>
+            <Text style={{ fontSize: 12, lineHeight: 20, color: "#666" }}>Read</Text>
+            <Text accessibilityRole="link" onPress={() => openPolicy("terms")} style={{ fontSize: 12, lineHeight: 20, fontFamily: "NunitoSans-Bold", color: "#6F5900", textDecorationLine: "underline" }}>Terms</Text>
+            <Text style={{ fontSize: 12, color: "#888" }}>·</Text>
+            <Text accessibilityRole="link" onPress={() => openPolicy("privacy")} style={{ fontSize: 12, lineHeight: 20, fontFamily: "NunitoSans-Bold", color: "#6F5900", textDecorationLine: "underline" }}>Privacy</Text>
+            <Text style={{ fontSize: 12, color: "#888" }}>·</Text>
+            <Text accessibilityRole="link" onPress={() => openPolicy("returns")} style={{ fontSize: 12, lineHeight: 20, fontFamily: "NunitoSans-Bold", color: "#6F5900", textDecorationLine: "underline" }}>Returns Policy</Text>
           </View>
-          <Text className="flex-1 text-sm leading-5 text-[#666]">
-            I accept Hook&apos;s Terms, Privacy Policy and Returns Policy.
-          </Text>
-        </Pressable>
+          {readyForPayment && !acceptedPolicies ? (
+            <View style={{ marginTop: 10, flexDirection: "row", alignItems: "center", gap: 7 }}>
+              <Ionicons name="information-circle-outline" size={15} color="#8A6500" />
+              <Text style={{ flex: 1, fontSize: 11, lineHeight: 16, color: "#8A6500" }}>Check the box above to enable payment.</Text>
+            </View>
+          ) : null}
+        </View>
       </ScrollView>
 
       <BottomActionBar>
@@ -349,9 +423,13 @@ export default function CheckoutScreen() {
               ? "Choose address"
               : !provider
                 ? "Choose logistics"
-                : !paymentChosen ? "Choose payment method" : "Pay now"
+                : !paymentChosen
+                  ? "Choose payment method"
+                  : !acceptedPolicies
+                    ? "Accept policies to pay"
+                    : "Pay now"
           }
-          disabled={busy}
+          disabled={busy || (readyForPayment && !acceptedPolicies)}
           loading={busy}
           onPress={() => void placeOrder()}
           flex={1}
@@ -397,10 +475,11 @@ export default function CheckoutScreen() {
         creditBalanceMinor={credits.data?.balanceMinor ?? 0}
         useCredits={useCredits}
         creditsAppliedMinor={money.creditsAppliedMinor}
+        estimatedEarnMinor={estimatedEarnMinor}
         payNowTotalMinor={money.totalMinor}
         podTotalMinor={money.payableBeforeCredits}
         podPaused={podPaused}
-        onToggleCredits={setUseCredits}
+        onToggleCredits={handleToggleCredits}
         onChoosePayNow={() => { setPaymentChosen(true); setSheet(null); }}
         onClose={() => setSheet(null)}
       />

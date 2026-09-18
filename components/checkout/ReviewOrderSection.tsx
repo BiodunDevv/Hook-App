@@ -26,7 +26,7 @@ function productImage(item: any) {
  * the same market-resolution fallback chain as the cart screen so a line that
  * only carries marketId still lands in the right group.
  */
-export function ReviewOrderSection({ items }: { items: any[] }) {
+export function ReviewOrderSection({ items, onEditOrder }: { items: any[]; onEditOrder: () => void }) {
   const [open, setOpen] = useState(true);
   const catalog = useCartMarketProductsQuery({ items });
 
@@ -57,7 +57,19 @@ export function ReviewOrderSection({ items }: { items: any[] }) {
         onPress={() => setOpen((current) => !current)}
         style={{ minHeight: 44, flexDirection: "row", alignItems: "center", justifyContent: "space-between" }}
       >
-        <Text className="text-base font-medium text-black">Review order</Text>
+        <Text className="flex-1 text-base font-medium text-black">Review order</Text>
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel="Edit items in cart"
+          hitSlop={8}
+          onPress={(event) => {
+            event.stopPropagation();
+            onEditOrder();
+          }}
+          style={{ minHeight: 36, justifyContent: "center", borderRadius: 18, backgroundColor: "white", paddingHorizontal: 14 }}
+        >
+          <Text style={{ fontSize: 12, fontFamily: "NunitoSans-Bold", color: "#7A6200" }}>Edit order</Text>
+        </Pressable>
         <Ionicons name={open ? "chevron-up" : "chevron-down"} size={20} color="#111" />
       </Pressable>
 
