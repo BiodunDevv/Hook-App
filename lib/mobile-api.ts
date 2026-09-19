@@ -1244,6 +1244,22 @@ export function useOrderQuery(id?: string) {
   });
 }
 
+export function useOrderReceiptQuery(id?: string) {
+  // Only exists once the order is packed; a 409 before then is expected, so no retries.
+  return useQuery({
+    enabled: Boolean(id),
+    retry: false,
+    queryKey: ["mobile", "orders", id || "", "receipt"] as const,
+    queryFn: () =>
+      apiRequest<{
+        receiptNumber: string;
+        packedAt?: string;
+        items: Array<{ title?: string; quantity?: number; color?: string; size?: string }>;
+        courier?: { name?: string; trackingNumber?: string };
+      }>(`/orders/${id}/receipt`),
+  });
+}
+
 export function useOrderFulfilmentQuery(id?: string) {
   return useQuery({
     enabled: Boolean(id),
