@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 
 import { toast } from '@/components/shared/toast';
 import { ApiError } from '@/lib/api';
+import { promptScheduledDeletion, scheduledDeletionDate } from '@/lib/account-deletion-api';
 import { useGoogleLoginMutation } from '@/lib/auth-api';
 import { registerPushToken } from '@/lib/push';
 import { saveSession } from '@/lib/session';
@@ -78,6 +79,11 @@ export function useHookGoogleAuth() {
       toast.success('Welcome to Hook', 'Google sign-in completed.');
     } catch (error) {
       if (isErrorWithCode(error) && error.code === statusCodes.SIGN_IN_CANCELLED) return;
+      const deletionDate = scheduledDeletionDate(error);
+      if (deletionDate) {
+        promptScheduledDeletion(deletionDate, {});
+        return;
+      }
       if (isErrorWithCode(error) && error.code === statusCodes.PLAY_SERVICES_NOT_AVAILABLE) {
         toast.error('Google Play Services unavailable', 'Update Google Play Services and try again.');
         return;

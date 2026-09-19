@@ -6,6 +6,7 @@ import { Pressable, Text, TextInput, View } from 'react-native';
 import { AuthPrimaryButton, AuthScreenShell } from '@/components/auth/auth-screen-shell';
 import { useAuthSheet } from '@/components/auth/AuthSheetProvider';
 import { toast } from '@/components/shared/toast';
+import { promptScheduledDeletion, restoreDeletedAccount, scheduledDeletionDate } from '@/lib/account-deletion-api';
 import { useLoginMutation } from '@/lib/auth-api';
 import { registerPushToken } from '@/lib/push';
 import { saveSession } from '@/lib/session';
@@ -36,6 +37,22 @@ export function PasswordLogin() {
       toast.success('Welcome back', 'You are signed in');
       if (!shouldResume) router.replace('/(tabs)');
     } catch (error) {
+      const deletionDate = scheduledDeletionDate(error);
+      if (deletionDate) {
+        // The password was correct, but the customer asked to delete this account.
+        promptScheduledDeletion(deletionDate, {
+          onRestore: async () => {
+            try {
+              await restoreDeletedAccount({ email, password });
+              toast.success('Account restored', 'Signing you in.');
+              await handleContinue();
+            } catch (restoreError) {
+              toast.error('Could not restore your account', restoreError instanceof Error ? restoreError.message : 'Please try again.');
+            }
+          },
+        });
+        return;
+      }
       toast.error('Could not sign in', error instanceof Error ? error.message : 'Please check your password.');
     }
   }

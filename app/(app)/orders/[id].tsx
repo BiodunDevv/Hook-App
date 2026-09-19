@@ -2,6 +2,7 @@ import { Ionicons } from "@expo/vector-icons";
 import { centeredHeaderTextStyle, screenPadding } from "@/constants/design-tokens";
 import * as Clipboard from "expo-clipboard";
 import * as WebBrowser from "expo-web-browser";
+import * as Crypto from "expo-crypto";
 import { setPaymentFlowActive } from '@/lib/payment-flow';
 import { useLocalSearchParams } from "expo-router";
 import React from "react";
@@ -13,11 +14,13 @@ import { HookConfirmSheet } from "@/components/shared/HookConfirmSheet";
 import { HookLoader } from "@/components/shared/HookLoader";
 import { RemoteImage } from "@/components/shared/RemoteImage";
 import { toast } from "@/components/shared/toast";
+import { waitForPaymentConfirmation } from "@/lib/payment-status";
 import {
   useCancelOrderMutation,
   useCreatePaymentLinkMutation,
   useOrderQuery,
   usePaymentStatusQuery,
+  useRespondToSubstitutionMutation,
 } from "@/lib/mobile-api";
 
 const money = (minor?: number) => `₦${(Number(minor || 0) / 100).toLocaleString("en-NG")}`;
@@ -53,6 +56,7 @@ export default function OrderDetailScreen() {
   const payment = usePaymentStatusQuery(id);
   const createPaymentLink = useCreatePaymentLinkMutation();
   const cancelOrder = useCancelOrderMutation();
+  const respondToSubstitution = useRespondToSubstitutionMutation();
   const [paymentBusy, setPaymentBusy] = React.useState(false);
   const [cancelOpen, setCancelOpen] = React.useState(false);
   const [expanded, setExpanded] = React.useState<Record<string, boolean>>({});
@@ -81,14 +85,11 @@ export default function OrderDetailScreen() {
       const result = await WebBrowser.openAuthSessionAsync(checkoutUrl.toString(), "hook://payments/return");
       await WebBrowser.dismissBrowser();
       if (result.type === "cancel" || result.type === "dismiss") return;
-      for (let attempt = 0; attempt < 6; attempt += 1) {
-        const refreshed = await payment.refetch();
-        if (String((refreshed.data as any)?.payment?.status || "").toUpperCase() === "CONFIRMED") {
-          toast.success("Payment confirmed");
-          await query.refetch();
-          return;
-        }
-        await new Promise((resolve) => setTimeout(resolve, 1500));
+      const outcome = await waitForPaymentConfirmation(id);
+      await Promise.all([payment.refetch(), query.refetch()]);
+      if (outcome === "confirmed") {
+        toast.success("Payment confirmed");
+        return;
       }
       toast.info("Payment confirmation is still processing");
     } catch (error) {
@@ -107,6 +108,31 @@ export default function OrderDetailScreen() {
     } finally { setPaymentBusy(false); }
   }
 
+  async function approveReplacement(entry: any) {
+    if (!id || respondToSubstitution.isPending) return;
+    try {
+      const result = await respondToSubstitution.mutateAsync({ orderId: id, substitutionId: entry.id, decision: "ACCEPT", version: entry.version, idempotencyKey: Crypto.randomUUID() });
+      if (!result.adjustmentAuthorizationUrl) {
+        toast.success(Number(entry.adjustmentMinor) < 0 ? "Replacement accepted and refund processed" : "Replacement accepted");
+        return;
+      }
+      setPaymentFlowActive(true);
+      const browserResult = await WebBrowser.openAuthSessionAsync(result.adjustmentAuthorizationUrl, "hook://payments/return");
+      await WebBrowser.dismissBrowser();
+      if (browserResult.type === "cancel" || browserResult.type === "dismiss") {
+        toast.info("Your replacement is saved. You can complete the top-up from this order.");
+        return;
+      }
+      await respondToSubstitution.mutateAsync({ orderId: id, substitutionId: entry.id, decision: "ACCEPT", version: result.version, idempotencyKey: Crypto.randomUUID() });
+      await query.refetch();
+      toast.success("Top-up confirmed. Fulfilment can continue.");
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Replacement could not be processed");
+    } finally {
+      setPaymentFlowActive(false);
+    }
+  }
+
   return <View className="flex-1 bg-[#f3f3f5]" style={{ paddingTop: insets.top }}>
     <View className="flex-row items-center justify-between py-3" style={{ paddingHorizontal: screenPadding }}>
       <HookBackButton />
@@ -123,6 +149,14 @@ export default function OrderDetailScreen() {
       <View className="mt-4"><Section title="Delivery information"><View className="flex-row items-start gap-3"><View className="h-10 w-10 items-center justify-center rounded-full bg-[#fff4c7]"><Ionicons name="location-outline" size={21} color="#d29b00" /></View><View className="flex-1"><Text className="text-xs font-bold uppercase text-[#d29b00]">Delivery address</Text><Text className="mt-1 text-sm font-semibold leading-6 text-[#333]">{order.address?.formattedAddress || "Address is being confirmed"}</Text></View></View>{order.deliveries?.some((delivery: any) => delivery.eta) ? <View className="mt-4 flex-row items-start gap-3"><View className="h-10 w-10 items-center justify-center rounded-full bg-[#fff4c7]"><Ionicons name="calendar-outline" size={20} color="#d29b00" /></View><View><Text className="text-xs font-bold uppercase text-[#d29b00]">Estimated arrival</Text><Text className="mt-1 text-sm font-semibold">{date(order.deliveries.find((delivery: any) => delivery.eta)?.eta)}</Text></View></View> : null}</Section></View>
 
       <View className="mt-4"><Section title="Items">{order.items?.map((item: any) => <View key={item.id || item.title} className="mb-3 flex-row gap-3 last:mb-0"><View className="h-20 w-20 overflow-hidden rounded-2xl bg-[#f1f1f2]"><RemoteImage uri={item.imageUrl} /></View><View className="flex-1"><View className="flex-row justify-between gap-3"><Text className="flex-1 text-sm font-black leading-5">{item.title}</Text><Text className="text-sm font-black">{money(item.lineTotalMinor)}</Text></View><Text className="mt-1 text-xs text-[#777]">{Object.values(item.variants || {}).filter(Boolean).join(" · ") || "Standard"}</Text><Text className="mt-2 text-xs font-bold text-[#555]">{money(item.unitPriceMinor)} × {item.quantity}</Text></View></View>)}</Section></View>
+
+      {order.substitutions?.filter((entry: any) => entry.status === "CUSTOMER_APPROVAL_PENDING").map((entry: any) => <View key={entry.id} className="mt-4 overflow-hidden rounded-[22px] border-2 border-hook bg-[#fff9df] p-4">
+        <View className="flex-row items-center gap-2"><Ionicons name="swap-horizontal" size={21} color="#111" /><Text className="flex-1 text-[17px] font-black">Replacement needs your approval</Text></View>
+        <Text className="mt-2 text-sm leading-6 text-[#666]">{entry.summary}</Text>
+        <View className="mt-4 rounded-2xl bg-white p-4"><Text className="text-xs font-bold uppercase text-[#888]">Proposed item</Text><Text className="mt-1 text-base font-black">{entry.proposal?.productTitle}</Text><Text className="mt-1 text-sm text-[#666]">{[entry.proposal?.selectedVariants?.color, entry.proposal?.selectedVariants?.size].filter(Boolean).join(" · ")} · Qty {entry.proposal?.quantity}</Text><View className="mt-3 flex-row justify-between"><Text className="text-sm text-[#666]">Price difference</Text><Text className={`font-black ${Number(entry.adjustmentMinor) < 0 ? "text-emerald-600" : "text-black"}`}>{Number(entry.adjustmentMinor) > 0 ? "+" : ""}{money(Math.abs(Number(entry.adjustmentMinor || 0)))}</Text></View></View>
+        <View className="mt-3 flex-row gap-2"><Pressable disabled={respondToSubstitution.isPending} onPress={async () => { try { await respondToSubstitution.mutateAsync({ orderId: id!, substitutionId: entry.id, decision: "DECLINE", version: entry.version, idempotencyKey: Crypto.randomUUID() }); toast.info("Replacement declined"); } catch (error) { toast.error(error instanceof Error ? error.message : "Response could not be sent"); } }} className="h-12 flex-1 items-center justify-center rounded-2xl border border-black/10 bg-white"><Text className="font-black">Decline</Text></Pressable><Pressable disabled={respondToSubstitution.isPending} onPress={() => void approveReplacement(entry)} className="h-12 flex-1 items-center justify-center rounded-2xl bg-hook"><Text className="font-black">{Number(entry.adjustmentMinor) > 0 ? `Accept & pay ${money(entry.adjustmentMinor)}` : "Accept"}</Text></Pressable></View>
+      </View>)}
+      {order.substitutions?.filter((entry: any) => ["PAYMENT_PENDING", "REFUND_PENDING"].includes(entry.status)).map((entry: any) => <View key={entry.id} className="mt-4 rounded-[22px] bg-white p-4"><View className="flex-row items-center gap-3"><View className="h-10 w-10 items-center justify-center rounded-full bg-[#fff4c7]"><Ionicons name={entry.status === "PAYMENT_PENDING" ? "card-outline" : "return-down-back-outline"} size={20} color="#9a7400" /></View><View className="flex-1"><Text className="font-black">{entry.status === "PAYMENT_PENDING" ? "Top-up required" : "Refund processing"}</Text><Text className="mt-1 text-xs leading-5 text-[#777]">{entry.status === "PAYMENT_PENDING" ? "Complete the secure Paystack top-up so fulfilment can resume." : "Your refund is being verified. Fulfilment resumes automatically after confirmation."}</Text></View></View>{entry.status === "PAYMENT_PENDING" && entry.adjustmentAuthorizationUrl ? <Pressable disabled={respondToSubstitution.isPending} onPress={() => void approveReplacement(entry)} className="mt-3 h-12 items-center justify-center rounded-2xl bg-hook"><Text className="font-black">Pay {money(Math.abs(Number(entry.adjustmentMinor || 0)))}</Text></Pressable> : null}</View>)}
 
       <View className="mt-4"><Section title="Order summary"><View className="gap-3"><View className="flex-row justify-between"><Text className="text-sm text-[#666]">Products</Text><Text className="text-sm font-bold">{money(order.subtotalMinor)}</Text></View><View className="flex-row justify-between"><Text className="text-sm text-[#666]">VAT {order.vatRate ? `(${Number(order.vatRate) * 100}%)` : ""}</Text><Text className="text-sm font-bold">{money(order.vatMinor)}</Text></View><View className="flex-row justify-between"><Text className="text-sm text-[#666]">Delivery</Text><Text className="text-sm font-bold">{money(order.deliveryFeeMinor)}</Text></View>{Number(order.couponDiscountMinor || 0) > 0 ? <View className="flex-row justify-between"><Text className="text-sm text-[#666]">{order.couponCode ? `Coupon (${order.couponCode})` : "Coupon"}</Text><Text className="text-sm font-bold text-emerald-600">−{money(order.couponDiscountMinor)}</Text></View> : null}{Number(order.creditsAppliedMinor || 0) > 0 ? <View className="flex-row justify-between"><Text className="text-sm text-[#666]">Hook Coin</Text><Text className="text-sm font-bold text-emerald-600">−{money(order.creditsAppliedMinor)}</Text></View> : null}{!Number(order.couponDiscountMinor || 0) && !Number(order.creditsAppliedMinor || 0) && Number(order.discountMinor || 0) > 0 ? <View className="flex-row justify-between"><Text className="text-sm text-[#666]">Discount</Text><Text className="text-sm font-bold text-emerald-600">−{money(order.discountMinor)}</Text></View> : null}<View className="mt-1 flex-row justify-between border-t border-black/10 pt-4"><Text className="text-base font-black">Total</Text><Text className="text-xl font-black">{money(order.totalMinor)}</Text></View></View></Section></View>
 

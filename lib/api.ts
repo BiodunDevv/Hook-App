@@ -51,7 +51,14 @@ export function getApiErrorMessage(
 
 type ApiOptions = RequestInit & {
   auth?: boolean;
+  /** Sent as the Idempotency-Key header. Reuse the same key when retrying the same action. */
+  idempotencyKey?: string;
+  /** Abort after this long. Defaults to 30s (mutations) / 20s (reads). */
+  timeoutMs?: number;
 };
+
+const DEFAULT_MUTATION_TIMEOUT_MS = 30_000;
+const DEFAULT_READ_TIMEOUT_MS = 20_000;
 
 const SENSITIVE_KEYS = /^(accessToken|refreshToken|authorization|password|token|idToken|otp|code|signupSessionToken)$/i;
 
@@ -97,6 +104,17 @@ function logNetworkError(method: string, path: string, error: unknown) {
   console.log('[ERROR]', error instanceof Error ? error.message : 'Unknown network error');
 }
 
+/**
+ * True when a failed mutation may still have succeeded on the server
+ * (timeout, dropped connection, 5xx, or a duplicate still being processed).
+ * The right response is to check the resulting state or retry with the same
+ * idempotency key, never to submit it again as a new action.
+ */
+export function isAmbiguousFailure(error: unknown) {
+  if (!(error instanceof ApiError)) return false;
+  return error.status === 0 || (error.status ?? 0) >= 500 || error.code === 'OPERATION_IN_PROGRESS';
+}
+
 export async function apiRequest<T>(path: string, options: ApiOptions = {}): Promise<T> {
   const method = (options.method || 'GET').toUpperCase();
   const canReplayBody = options.body == null || typeof options.body === 'string';
@@ -106,6 +124,7 @@ export async function apiRequest<T>(path: string, options: ApiOptions = {}): Pro
     const headers = new Headers(options.headers);
     headers.set('Accept', 'application/json');
     if (options.body && !headers.has('Content-Type')) headers.set('Content-Type', 'application/json');
+    if (options.idempotencyKey) headers.set('Idempotency-Key', options.idempotencyKey);
 
     let session: AuthSession | null = null;
     if (options.auth !== false) {
@@ -125,18 +144,42 @@ export async function apiRequest<T>(path: string, options: ApiOptions = {}): Pro
     }
     let response: Response;
     logRequest(method, path, options.body);
+    // Without a timeout a hung connection left the UI spinning forever. A
+    // timeout is AMBIGUOUS for a mutation: the server may have completed it,
+    // so callers must check status or retry with the SAME idempotency key.
+    const controller = new AbortController();
+    const timeoutMs = options.timeoutMs ?? (method === 'GET' ? DEFAULT_READ_TIMEOUT_MS : DEFAULT_MUTATION_TIMEOUT_MS);
+    const timer = setTimeout(() => controller.abort(), timeoutMs);
+    const callerSignal = options.signal;
+    if (callerSignal) {
+      if (callerSignal.aborted) controller.abort();
+      else callerSignal.addEventListener('abort', () => controller.abort(), { once: true });
+    }
     try {
       response = await fetch(`${API_BASE_URL}${path}`, {
         ...options,
         headers,
+        signal: controller.signal,
       });
     } catch (error) {
       logNetworkError(method, path, error);
+      if (controller.signal.aborted && !callerSignal?.aborted) {
+        throw new ApiError(
+          method === 'GET'
+            ? 'The request took too long. Please try again.'
+            : 'This is taking longer than expected. We are checking whether it went through.',
+          0,
+          error,
+          'REQUEST_TIMEOUT',
+        );
+      }
       throw new ApiError(
         error instanceof Error ? error.message : 'Unable to reach Hook server',
         0,
         error,
       );
+    } finally {
+      clearTimeout(timer);
     }
     const payload = await response.json().catch(() => null);
     logResponse(method, path, response.status, payload);

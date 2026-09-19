@@ -1,5 +1,4 @@
 import { Ionicons } from "@expo/vector-icons";
-import * as Crypto from "expo-crypto";
 import * as WebBrowser from "expo-web-browser";
 import { setPaymentFlowActive } from "@/lib/payment-flow";
 import { router } from "expo-router";
@@ -22,7 +21,9 @@ import { PaymentMethodSheet } from "@/components/checkout/PaymentMethodSheet";
 import { ReviewOrderSection } from "@/components/checkout/ReviewOrderSection";
 import { OrderTotals } from "@/components/checkout/OrderTotals";
 import { PaymentProcessingScreen, type PaymentStage } from "@/components/checkout/PaymentProcessingScreen";
-import { apiRequest } from "@/lib/api";
+import { isAmbiguousFailure } from "@/lib/api";
+import { releaseIdempotencyKey, stableIdempotencyKey } from "@/lib/idempotency";
+import { waitForPaymentConfirmation } from "@/lib/payment-status";
 import {
   useAddressesQuery,
   useCartQuery,
@@ -207,10 +208,30 @@ export default function CheckoutScreen() {
         couponCode: coupon?.code,
         useCredits,
       });
-      const order = await confirm.mutateAsync({
-        previewToken: summary.previewToken,
-        idempotencyKey: Crypto.randomUUID(),
-      });
+      // One key per logical checkout, stored on the device. A retry after a
+      // timeout, remount or app restart reuses it, so the server returns the
+      // order it already created instead of making a second one.
+      const idempotencyKey = await stableIdempotencyKey(
+        "checkout.confirm",
+        JSON.stringify({
+          address: selectedAddress.publicId,
+          provider: provider.publicId || provider.id,
+          coupon: coupon?.code ?? null,
+          credits: Boolean(useCredits),
+          items: cartItems.map((item: any) => [item.id ?? item.publicId, item.quantity]),
+        }),
+      );
+      let order;
+      try {
+        order = await confirm.mutateAsync({ previewToken: summary.previewToken, idempotencyKey });
+      } catch (error) {
+        // A definite rejection (e.g. balance changed) frees the key so the
+        // corrected checkout can run; an ambiguous one keeps it for the retry.
+        if (!isAmbiguousFailure(error)) await releaseIdempotencyKey("checkout.confirm");
+        else toast.info("We could not confirm your order went through. Tap Place order again: you will not be charged twice.");
+        throw error;
+      }
+      await releaseIdempotencyKey("checkout.confirm");
 
       const paymentLink = await createPaymentLink.mutateAsync({ orderId: order.id });
       if (!paymentLink.url) throw new Error("Secure payment checkout is unavailable");
@@ -228,14 +249,11 @@ export default function CheckoutScreen() {
         return;
       }
       setPaymentStage("confirming");
-      for (let attempt = 0; attempt < 8; attempt += 1) {
-        const status = await apiRequest<any>(`/payments/${order.id}`);
-        if (String(status.payment?.status || "").toUpperCase() === "CONFIRMED") {
-          toast.success("Payment confirmed");
-          router.replace({ pathname: "/payments/[id]", params: { id: order.id } } as never);
-          return;
-        }
-        await new Promise((resolve) => setTimeout(resolve, 2000));
+      const outcome = await waitForPaymentConfirmation(order.id);
+      if (outcome === "confirmed") {
+        toast.success("Payment confirmed");
+        router.replace({ pathname: "/payments/[id]", params: { id: order.id } } as never);
+        return;
       }
       toast.info("Payment confirmation is still processing");
       router.replace({ pathname: "/payments/[id]", params: { id: order.id } } as never);

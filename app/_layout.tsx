@@ -239,6 +239,7 @@ export default function RootLayout() {
               <Stack.Screen name="(app)/profile/edit" options={{ headerShown: false }} />
               <Stack.Screen name="(app)/profile/security" options={{ headerShown: false }} />
               <Stack.Screen name="(app)/profile/devices" options={{ headerShown: false }} />
+              <Stack.Screen name="(app)/profile/delete-account" options={{ headerShown: false }} />
               <Stack.Screen
                 name="(app)/states"
                 options={{ headerShown: false, gestureEnabled: false }}

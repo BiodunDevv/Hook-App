@@ -1,3 +1,4 @@
+import { withStableIdempotency } from "@/lib/idempotency";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useEffect } from "react";
 import * as Crypto from "expo-crypto";
@@ -151,10 +152,15 @@ function toQueryString(params?: QueryParams) {
   return value ? `?${value}` : "";
 }
 
-function post<TData, TVariables = unknown>(path: string, variables?: TVariables) {
+function post<TData, TVariables = unknown>(
+  path: string,
+  variables?: TVariables,
+  options?: { idempotencyKey?: string },
+) {
   return apiRequest<TData>(path, {
     method: "POST",
     body: variables ? JSON.stringify(variables) : undefined,
+    idempotencyKey: options?.idempotencyKey,
   });
 }
 
@@ -1211,7 +1217,7 @@ export function useCheckoutConfirmMutation() {
     }) =>
       apiRequest<any>("/checkout/confirm", {
         method: "POST",
-        headers: { "Idempotency-Key": input.idempotencyKey },
+        idempotencyKey: input.idempotencyKey,
         body: JSON.stringify({ previewToken: input.previewToken }),
       }),
     onSuccess: () => {
@@ -1286,12 +1292,31 @@ export function useCancelOrderMutation() {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: (input: { orderId: string; reason?: string }) =>
-      post(`/orders/${input.orderId}/cancel`, { reason: input.reason }),
+      withStableIdempotency(`order.cancel.${input.orderId}`, JSON.stringify(input), (idempotencyKey) =>
+        post(`/orders/${input.orderId}/cancel`, { reason: input.reason }, { idempotencyKey }),
+      ),
     onSuccess: (_data, input) => {
       queryClient.invalidateQueries({ queryKey: ["mobile", "orders"] });
       queryClient.invalidateQueries({
         queryKey: mobileQueryKeys.order(input.orderId),
       });
+    },
+  });
+}
+
+export function useRespondToSubstitutionMutation() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (input: { orderId: string; substitutionId: string; decision: "ACCEPT" | "DECLINE"; version: number; idempotencyKey: string }) =>
+      apiRequest<{ id: string; version: number; status: string; adjustmentAuthorizationUrl?: string }>(`/orders/${input.orderId}/substitutions/${input.substitutionId}/respond`, {
+        method: "POST",
+        idempotencyKey: input.idempotencyKey,
+        body: JSON.stringify({ decision: input.decision, version: input.version }),
+      }),
+    onSuccess: (_data, input) => {
+      queryClient.invalidateQueries({ queryKey: mobileQueryKeys.order(input.orderId) });
+      queryClient.invalidateQueries({ queryKey: ["mobile", "orders"] });
+      queryClient.invalidateQueries({ queryKey: ["mobile", "notifications"] });
     },
   });
 }
@@ -1394,23 +1419,32 @@ export function useCloseNegotiationMutation() {
 export function useInitializePaymentMutation() {
   return useMutation({
     mutationFn: (input: { orderId: string; fulfilmentGroupId?: string }) =>
-      post<any, typeof input>("/payments/initialize", input),
+      withStableIdempotency(
+        `payment.initialize.${input.orderId}.${input.fulfilmentGroupId ?? ""}`,
+        JSON.stringify(input),
+        (idempotencyKey) => post<any, typeof input>("/payments/initialize", input, { idempotencyKey }),
+      ),
   });
 }
 
 export function useCreatePaymentLinkMutation() {
   return useMutation({
     mutationFn: (input: { orderId: string; fulfilmentGroupId?: string }) =>
-      post<
-        {
-          id: string;
-          url: string;
-          token: string;
-          expiresAt: string;
-          status: string;
-        },
-        typeof input
-      >("/payments/links", input),
+      withStableIdempotency(
+        `payment.link.${input.orderId}.${input.fulfilmentGroupId ?? ""}`,
+        JSON.stringify(input),
+        (idempotencyKey) =>
+          post<
+            {
+              id: string;
+              url: string;
+              token: string;
+              expiresAt: string;
+              status: string;
+            },
+            typeof input
+          >("/payments/links", input, { idempotencyKey }),
+      ),
   });
 }
 
