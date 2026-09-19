@@ -1,3 +1,4 @@
+import { friendlyVariantValue } from "@/lib/color-name";
 import { Ionicons } from "@expo/vector-icons";
 import { useMemo, useState } from "react";
 import { Pressable, Text, View } from "react-native";
@@ -103,7 +104,7 @@ export function ReviewOrderSection({ items, onEditOrder }: { items: any[]; onEdi
                           {item.product?.title || item.productSnapshot?.title || "Product"}
                         </Text>
                         <Text style={{ fontSize: 12, lineHeight: 18, color: "#666" }}>
-                          {Object.values(item.selectedVariants || {}).filter(Boolean).join(" · ") || "Standard item"}
+                          {Object.entries(item.selectedVariants || {}).filter(([, value]) => Boolean(value)).map(([key, value]) => friendlyVariantValue(key, value)).join(" · ") || "Standard item"}
                         </Text>
                       </View>
                     </View>

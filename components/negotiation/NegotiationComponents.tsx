@@ -1,3 +1,4 @@
+import { colorName } from "@/lib/color-name";
 import { Ionicons } from "@expo/vector-icons";
 import { router } from "expo-router";
 import { useState } from "react";
@@ -305,7 +306,7 @@ export function NegotiationCartConfirmation({
       <View className="gap-4">
         <Text className="text-base font-bold">{product?.title}</Text>
         <Text className="text-sm text-[#666]">
-          {[option?.colour, option?.size].filter(Boolean).join(" · ")} ·
+          {[colorName(option?.colour), option?.size].filter(Boolean).join(" · ")} ·
           Quantity {quantity}
         </Text>
         <Text className="text-sm">{negotiationMoney(price)} each</Text>

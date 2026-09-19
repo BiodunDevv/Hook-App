@@ -1,3 +1,4 @@
+import { colorName, friendlyVariantValue } from "@/lib/color-name";
 import { Ionicons } from "@expo/vector-icons";
 import { centeredHeaderTextStyle, screenPadding } from "@/constants/design-tokens";
 import * as Clipboard from "expo-clipboard";
@@ -19,6 +20,7 @@ import {
   useCancelOrderMutation,
   useCreatePaymentLinkMutation,
   useOrderQuery,
+  useOrderReceiptQuery,
   usePaymentStatusQuery,
   useRespondToSubstitutionMutation,
 } from "@/lib/mobile-api";
@@ -53,6 +55,7 @@ export default function OrderDetailScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const insets = useSafeAreaInsets();
   const query = useOrderQuery(id);
+  const receipt = useOrderReceiptQuery(id).data;
   const payment = usePaymentStatusQuery(id);
   const createPaymentLink = useCreatePaymentLinkMutation();
   const cancelOrder = useCancelOrderMutation();
@@ -148,12 +151,28 @@ export default function OrderDetailScreen() {
 
       <View className="mt-4"><Section title="Delivery information"><View className="flex-row items-start gap-3"><View className="h-10 w-10 items-center justify-center rounded-full bg-[#fff4c7]"><Ionicons name="location-outline" size={21} color="#d29b00" /></View><View className="flex-1"><Text className="text-xs font-bold uppercase text-[#d29b00]">Delivery address</Text><Text className="mt-1 text-sm font-semibold leading-6 text-[#333]">{order.address?.formattedAddress || "Address is being confirmed"}</Text></View></View>{order.deliveries?.some((delivery: any) => delivery.eta) ? <View className="mt-4 flex-row items-start gap-3"><View className="h-10 w-10 items-center justify-center rounded-full bg-[#fff4c7]"><Ionicons name="calendar-outline" size={20} color="#d29b00" /></View><View><Text className="text-xs font-bold uppercase text-[#d29b00]">Estimated arrival</Text><Text className="mt-1 text-sm font-semibold">{date(order.deliveries.find((delivery: any) => delivery.eta)?.eta)}</Text></View></View> : null}</Section></View>
 
-      <View className="mt-4"><Section title="Items">{order.items?.map((item: any) => <View key={item.id || item.title} className="mb-3 flex-row gap-3 last:mb-0"><View className="h-20 w-20 overflow-hidden rounded-2xl bg-[#f1f1f2]"><RemoteImage uri={item.imageUrl} /></View><View className="flex-1"><View className="flex-row justify-between gap-3"><Text className="flex-1 text-sm font-black leading-5">{item.title}</Text><Text className="text-sm font-black">{money(item.lineTotalMinor)}</Text></View><Text className="mt-1 text-xs text-[#777]">{Object.values(item.variants || {}).filter(Boolean).join(" · ") || "Standard"}</Text><Text className="mt-2 text-xs font-bold text-[#555]">{money(item.unitPriceMinor)} × {item.quantity}</Text></View></View>)}</Section></View>
+      {receipt ? (
+        <View className="mt-4">
+          <Section title="Your Hook receipt">
+            <Text className="text-xs font-bold uppercase text-[#888]">Receipt number</Text>
+            <Text className="mt-1 text-lg font-black">{receipt.receiptNumber}</Text>
+            <Text className="mt-2 text-sm leading-6 text-[#666]">Packed {date(receipt.packedAt)}{receipt.courier?.name ? ` · ${receipt.courier.name}` : ""}{receipt.courier?.trackingNumber ? ` · ${receipt.courier.trackingNumber}` : ""}</Text>
+            <Pressable
+              onPress={() => void Share.share({ message: `Hook receipt ${receipt.receiptNumber}\n${receipt.items.map((item) => `${item.quantity}× ${item.title}`).join("\n")}${receipt.courier?.trackingNumber ? `\nTracking: ${receipt.courier.trackingNumber}` : ""}` })}
+              className="mt-3 h-12 items-center justify-center rounded-2xl bg-hook"
+            >
+              <Text className="font-black">Share receipt</Text>
+            </Pressable>
+          </Section>
+        </View>
+      ) : null}
+
+      <View className="mt-4"><Section title="Items">{order.items?.map((item: any) => <View key={item.id || item.title} className="mb-3 flex-row gap-3 last:mb-0"><View className="h-20 w-20 overflow-hidden rounded-2xl bg-[#f1f1f2]"><RemoteImage uri={item.imageUrl} /></View><View className="flex-1"><View className="flex-row justify-between gap-3"><Text className="flex-1 text-sm font-black leading-5">{item.title}</Text><Text className="text-sm font-black">{money(item.lineTotalMinor)}</Text></View><Text className="mt-1 text-xs text-[#777]">{Object.entries(item.variants || {}).filter(([, value]) => Boolean(value)).map(([key, value]) => friendlyVariantValue(key, value)).join(" · ") || "Standard"}</Text><Text className="mt-2 text-xs font-bold text-[#555]">{money(item.unitPriceMinor)} × {item.quantity}</Text></View></View>)}</Section></View>
 
       {order.substitutions?.filter((entry: any) => entry.status === "CUSTOMER_APPROVAL_PENDING").map((entry: any) => <View key={entry.id} className="mt-4 overflow-hidden rounded-[22px] border-2 border-hook bg-[#fff9df] p-4">
         <View className="flex-row items-center gap-2"><Ionicons name="swap-horizontal" size={21} color="#111" /><Text className="flex-1 text-[17px] font-black">Replacement needs your approval</Text></View>
         <Text className="mt-2 text-sm leading-6 text-[#666]">{entry.summary}</Text>
-        <View className="mt-4 rounded-2xl bg-white p-4"><Text className="text-xs font-bold uppercase text-[#888]">Proposed item</Text><Text className="mt-1 text-base font-black">{entry.proposal?.productTitle}</Text><Text className="mt-1 text-sm text-[#666]">{[entry.proposal?.selectedVariants?.color, entry.proposal?.selectedVariants?.size].filter(Boolean).join(" · ")} · Qty {entry.proposal?.quantity}</Text><View className="mt-3 flex-row justify-between"><Text className="text-sm text-[#666]">Price difference</Text><Text className={`font-black ${Number(entry.adjustmentMinor) < 0 ? "text-emerald-600" : "text-black"}`}>{Number(entry.adjustmentMinor) > 0 ? "+" : ""}{money(Math.abs(Number(entry.adjustmentMinor || 0)))}</Text></View></View>
+        <View className="mt-4 rounded-2xl bg-white p-4"><Text className="text-xs font-bold uppercase text-[#888]">Proposed item</Text><Text className="mt-1 text-base font-black">{entry.proposal?.productTitle}</Text><Text className="mt-1 text-sm text-[#666]">{[colorName(entry.proposal?.selectedVariants?.color), entry.proposal?.selectedVariants?.size].filter(Boolean).join(" · ")} · Qty {entry.proposal?.quantity}</Text><View className="mt-3 flex-row justify-between"><Text className="text-sm text-[#666]">Price difference</Text><Text className={`font-black ${Number(entry.adjustmentMinor) < 0 ? "text-emerald-600" : "text-black"}`}>{Number(entry.adjustmentMinor) > 0 ? "+" : ""}{money(Math.abs(Number(entry.adjustmentMinor || 0)))}</Text></View></View>
         <View className="mt-3 flex-row gap-2"><Pressable disabled={respondToSubstitution.isPending} onPress={async () => { try { await respondToSubstitution.mutateAsync({ orderId: id!, substitutionId: entry.id, decision: "DECLINE", version: entry.version, idempotencyKey: Crypto.randomUUID() }); toast.info("Replacement declined"); } catch (error) { toast.error(error instanceof Error ? error.message : "Response could not be sent"); } }} className="h-12 flex-1 items-center justify-center rounded-2xl border border-black/10 bg-white"><Text className="font-black">Decline</Text></Pressable><Pressable disabled={respondToSubstitution.isPending} onPress={() => void approveReplacement(entry)} className="h-12 flex-1 items-center justify-center rounded-2xl bg-hook"><Text className="font-black">{Number(entry.adjustmentMinor) > 0 ? `Accept & pay ${money(entry.adjustmentMinor)}` : "Accept"}</Text></Pressable></View>
       </View>)}
       {order.substitutions?.filter((entry: any) => ["PAYMENT_PENDING", "REFUND_PENDING"].includes(entry.status)).map((entry: any) => <View key={entry.id} className="mt-4 rounded-[22px] bg-white p-4"><View className="flex-row items-center gap-3"><View className="h-10 w-10 items-center justify-center rounded-full bg-[#fff4c7]"><Ionicons name={entry.status === "PAYMENT_PENDING" ? "card-outline" : "return-down-back-outline"} size={20} color="#9a7400" /></View><View className="flex-1"><Text className="font-black">{entry.status === "PAYMENT_PENDING" ? "Top-up required" : "Refund processing"}</Text><Text className="mt-1 text-xs leading-5 text-[#777]">{entry.status === "PAYMENT_PENDING" ? "Complete the secure Paystack top-up so fulfilment can resume." : "Your refund is being verified. Fulfilment resumes automatically after confirmation."}</Text></View></View>{entry.status === "PAYMENT_PENDING" && entry.adjustmentAuthorizationUrl ? <Pressable disabled={respondToSubstitution.isPending} onPress={() => void approveReplacement(entry)} className="mt-3 h-12 items-center justify-center rounded-2xl bg-hook"><Text className="font-black">Pay {money(Math.abs(Number(entry.adjustmentMinor || 0)))}</Text></Pressable> : null}</View>)}
