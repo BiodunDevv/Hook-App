@@ -56,7 +56,6 @@ export function HomeSearchOverlay({
         shadowOffset: { width: 0, height: 4 },
         shadowOpacity: 0.08,
         shadowRadius: 12,
-        elevation: 6,
       }}
     >
       <ScrollView keyboardShouldPersistTaps="handled" style={{ maxHeight: 420 }} nestedScrollEnabled>

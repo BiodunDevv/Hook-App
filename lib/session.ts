@@ -10,13 +10,14 @@ export type HookUser = {
   role?: string;
   isEmailVerified?: boolean;
   publicId?: string;
-  accountType?: "customer" | "staff" | "runner" | "partner";
+  accountType?: "customer" | "staff" | "marketassociate" | "partner";
   accountStatus?: string;
 };
 
 export type AuthSession = {
   accessToken: string;
   refreshToken: string;
+  accessExpiresAt?: string;
   user: HookUser;
 };
 
@@ -35,7 +36,7 @@ const NON_CUSTOMER_ROLES = new Set([
   "customer_support_officer",
   "finance_officer",
   "management_viewer",
-  "runner",
+  "marketassociate",
   "partner",
   "field_agent",
   "vendor",
@@ -46,7 +47,7 @@ const NON_CUSTOMER_ROLES = new Set([
 export function isCustomerSession(session: AuthSession | null | undefined) {
   if (!session?.accessToken) return false;
   if (session.user.accountType === "customer") return true;
-  if (session.user.accountType === "staff" || session.user.accountType === "runner" || session.user.accountType === "partner") return false;
+  if (session.user.accountType === "staff" || session.user.accountType === "marketassociate" || session.user.accountType === "partner") return false;
   const role = String(session.user.role || "").trim().toLowerCase();
   return !NON_CUSTOMER_ROLES.has(role);
 }

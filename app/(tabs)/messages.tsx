@@ -16,6 +16,7 @@ import { HookBackButton } from "@/components/shared/HookBackButton";
 import { HookLoader } from "@/components/shared/HookLoader";
 import { RemoteImage } from "@/components/shared/RemoteImage";
 import { useNegotiationsQuery } from "@/lib/mobile-api";
+import { isNegotiationActive } from "@/lib/negotiations";
 
 type NegotiationRow = {
   negotiationId: string;
@@ -34,7 +35,8 @@ type NegotiationRow = {
 };
 
 function sessionTime(row: NegotiationRow, now: number) {
-  if (row.status === "agreed") return { label: "Agreed", active: false };
+  const active = isNegotiationActive(row, now);
+  if (row.status === "agreed") return { label: "Agreed", active };
   if (row.status !== "active") {
     const labels: Record<string, string> = {
       declined: "Closed",
@@ -42,16 +44,16 @@ function sessionTime(row: NegotiationRow, now: number) {
       closed: "Closed",
       replaced: "Replaced",
     };
-    return { label: labels[row.status] || row.status, active: false };
+    return { label: labels[row.status] || row.status, active };
   }
   if (row.sessionMode === "unlimited" || !row.expiresAt) {
-    return { label: "Unlimited", active: true };
+    return { label: "Unlimited", active };
   }
   const seconds = Math.max(
     0,
     Math.floor((new Date(row.expiresAt).getTime() - now) / 1000),
   );
-  if (!seconds) return { label: "Expired", active: false };
+  if (!seconds) return { label: "Expired", active };
   const hours = Math.floor(seconds / 3600);
   const minutes = Math.floor((seconds % 3600) / 60);
   const remainder = seconds % 60;
@@ -59,7 +61,7 @@ function sessionTime(row: NegotiationRow, now: number) {
     label: hours
       ? `${hours}:${String(minutes).padStart(2, "0")}:${String(remainder).padStart(2, "0")}`
       : `${String(minutes).padStart(2, "0")}:${String(remainder).padStart(2, "0")}`,
-    active: true,
+    active,
   };
 }
 

@@ -4,7 +4,7 @@ import { io, Socket } from "socket.io-client";
 import { useEffect, useRef } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 
-import { API_BASE_URL, refreshSession } from "@/lib/api";
+import { API_BASE_URL, refreshSession, ApiError } from "@/lib/api";
 import {
   getSession,
   clearSession,
@@ -13,6 +13,7 @@ import {
 } from "@/lib/session";
 
 type RealtimePayload = {
+  data?: unknown;
   type?: string;
   entityType?: string;
   entityId?: string;
@@ -68,6 +69,7 @@ export class HookRealtimeClient {
         this.refreshAttempted = false;
         this.listeners.forEach((listener) => listener("realtime.connected", {}));
       });
+      this.socket.on('disconnect', () => this.listeners.forEach((listener) => listener('realtime.disconnected', {})));
     }
     const credentialsChanged = this.authSignature !== nextSignature;
     this.authSignature = nextSignature;
@@ -82,6 +84,17 @@ export class HookRealtimeClient {
   disconnect() {
     this.socket?.disconnect();
   }
+  get connected() { return Boolean(this.socket?.connected); }
+  async request<T>(event: 'negotiation.subscribe' | 'negotiation.send', payload: unknown): Promise<T> {
+    await this.connect();
+    if (!this.socket?.connected) throw new ApiError('Chat is reconnecting. Please retry when connected.', 503, undefined, 'CHAT_DISCONNECTED');
+    let result: { ok: boolean; data?: T; error?: { code?: string; message?: string } };
+    try { result = await this.socket.timeout(50_000).emitWithAck(event, payload); }
+    catch { throw new ApiError('Message confirmation was interrupted. Retry safely to check its result.', 503, undefined, 'CHAT_ACK_TIMEOUT'); }
+    if (!result.ok) throw new ApiError(result.error?.message || 'Could not send message', 503, undefined, result.error?.code);
+    return result.data as T;
+  }
+  unsubscribeNegotiation() { this.socket?.emit('negotiation.unsubscribe'); }
 
   on(listener: (event: string, payload: RealtimePayload) => void) {
     this.listeners.add(listener);
@@ -94,11 +107,16 @@ export class HookRealtimeClient {
     };
   }
 }
+export const hookRealtime = new HookRealtimeClient();
 
 function invalidateForEvent(queryClient: ReturnType<typeof useQueryClient>, event: string) {
   if (event === "realtime.connected") {
     queryClient.invalidateQueries({ queryKey: ["mobile", "feed"] });
+    queryClient.invalidateQueries({ queryKey: ["mobile", "discover"] });
     queryClient.invalidateQueries({ queryKey: ["mobile", "products"] });
+    queryClient.invalidateQueries({ queryKey: ["mobile", "search"] });
+    queryClient.invalidateQueries({ queryKey: ["mobile", "categories"] });
+    queryClient.invalidateQueries({ queryKey: ["mobile", "public"] });
     queryClient.invalidateQueries({ queryKey: ["mobile", "notifications"] });
     queryClient.invalidateQueries({ queryKey: ["mobile", "orders"] });
     queryClient.invalidateQueries({ queryKey: ["mobile", "cart"] });
@@ -132,9 +150,14 @@ export function MobileRealtimeBridge() {
   const clientRef = useRef<HookRealtimeClient | null>(null);
 
   useEffect(() => {
-    const client = clientRef.current || new HookRealtimeClient();
+    const client = clientRef.current || hookRealtime;
     clientRef.current = client;
-    const stopEvents = client.on((event) => {
+    const stopEvents = client.on((event, payload) => {
+      if (event === 'negotiation.messages' && payload.entityId && payload.data) {
+        const next = payload.data as { version?: number };
+        queryClient.setQueryData<{ version?: number }>(['mobile', 'negotiations', payload.entityId], (old) => (old?.version || 0) > (next.version || 0) ? old : next);
+        queryClient.invalidateQueries({ queryKey: ['mobile', 'negotiations'] });
+      }
       if (event === "session.revoked") {
         void (async () => {
           await clearSession();

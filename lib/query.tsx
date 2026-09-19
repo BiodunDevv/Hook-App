@@ -2,6 +2,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { PropsWithChildren, useState } from 'react';
 import { MobileRealtimeBridge } from '@/lib/realtime';
 import { ApiError } from '@/lib/api';
+import { AppReleaseGate } from '@/components/shared/AppReleaseGate';
 
 export function AppQueryProvider({ children }: PropsWithChildren) {
   const [queryClient] = useState(
@@ -28,5 +29,6 @@ export function AppQueryProvider({ children }: PropsWithChildren) {
   return <QueryClientProvider client={queryClient}>
     {children}
     <MobileRealtimeBridge />
+    <AppReleaseGate />
   </QueryClientProvider>;
 }

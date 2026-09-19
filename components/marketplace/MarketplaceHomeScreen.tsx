@@ -30,7 +30,7 @@ import { MarketplaceSearch } from "./MarketplaceSearch";
 import { ScallopedEdge } from "./ScallopedEdge";
 import { ProfileAvatar } from "@/components/profile/ProfileComponents";
 
-const HOOK_APP_ICON = require("../../assets/images/app-icon.png");
+const HOOK_APP_ICON = require("../../assets/images/market-icon.png");
 
 export function MarketplaceHomeScreen() {
   const session = useCustomerSessionQuery();

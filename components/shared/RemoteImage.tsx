@@ -1,7 +1,7 @@
 import { Ionicons } from "@expo/vector-icons";
 import { Image, type ImageContentFit, type ImageSource } from "expo-image";
 import { useEffect, useState } from "react";
-import { StyleSheet, View } from "react-native";
+import { Platform, StyleSheet, View } from "react-native";
 
 type RemoteImageProps = {
   uri?: string | null;
@@ -19,6 +19,9 @@ export function RemoteImage({
   transition = 180,
 }: RemoteImageProps) {
   const [failed, setFailed] = useState(false);
+  // Android's native cross-dissolve can leave stale image layers behind when
+  // cards re-render inside a scrolling grid. iOS can keep the subtle fade.
+  const safeTransition = Platform.OS === "android" ? 0 : transition;
 
   useEffect(() => setFailed(false), [uri]);
 
@@ -30,7 +33,7 @@ export function RemoteImage({
           style={StyleSheet.absoluteFill}
           contentFit={contentFit}
           cachePolicy="memory-disk"
-          transition={transition}
+          transition={safeTransition}
         />
       );
     }
@@ -46,11 +49,13 @@ export function RemoteImage({
 
   return (
     <Image
-      source={{ uri }}
+      key={uri}
+      source={uri}
       style={StyleSheet.absoluteFill}
       contentFit={contentFit}
       cachePolicy="memory-disk"
-      transition={transition}
+      recyclingKey={uri}
+      transition={safeTransition}
       onError={() => setFailed(true)}
     />
   );

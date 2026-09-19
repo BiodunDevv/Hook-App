@@ -1,9 +1,4 @@
-import {
-  DarkTheme,
-  DefaultTheme,
-  ThemeProvider,
-} from "@react-navigation/native";
-import { Stack, usePathname } from "expo-router";
+import { DefaultTheme, Stack, ThemeProvider, usePathname } from "expo-router";
 import * as Linking from "expo-linking";
 import * as WebBrowser from "expo-web-browser";
 import * as LocalAuthentication from "expo-local-authentication";
@@ -12,12 +7,12 @@ import { StatusBar } from "expo-status-bar";
 import "react-native-reanimated";
 import { GestureHandlerRootView } from "react-native-gesture-handler";
 import { KeyboardProvider } from "react-native-keyboard-controller";
+import { BottomSheetModalProvider } from "@gorhom/bottom-sheet";
 import "../global.css";
 
 import { AppState, Text, TextInput, View } from "react-native";
 import { SafeAreaProvider, SafeAreaView } from "react-native-safe-area-context";
 import { useEffect, useState } from "react";
-import { useColorScheme } from "@/hooks/use-color-scheme";
 import { ToastProvider } from "@/components/shared/toast";
 import { AppQueryProvider } from "@/lib/query";
 import { HookLocationProvider } from "@/lib/location-context";
@@ -52,11 +47,15 @@ function applyNunitoDefaults() {
 }
 
 export default function RootLayout() {
-  const colorScheme = useColorScheme();
   const pathname = usePathname();
   // The Home tab resolves to "/", so only the real splash route may bypass outage gating.
   const isLaunchSplash = pathname === "/splash";
   const isMarketHero = pathname.includes("/markets/");
+  const isMainTab = ['/', '/discover', '/messages', '/profile'].includes(pathname);
+  const safeAreaBackground = isMainTab ? '#F1F1F3' : '#FFFFFF';
+  // Every route fills the window. Interactive footers reserve their own safe
+  // area rather than shrinking the entire navigator and exposing a bottom strip.
+  const isFullBleedRoute = isLaunchSplash || pathname === "/onboarding";
   const [fontsLoaded] = useFonts({
     "NunitoSans-Regular": require("@expo-google-fonts/nunito-sans/400Regular/NunitoSans_400Regular.ttf"),
     "NunitoSans-Medium": require("@expo-google-fonts/nunito-sans/500Medium/NunitoSans_500Medium.ttf"),
@@ -139,7 +138,7 @@ export default function RootLayout() {
           {/* This screen has no padded header of its own, so it insets on all edges. */}
           <SafeAreaView style={{ flex: 1, backgroundColor: "#FFC809" }}>
             <BackendUnavailableScreen retrying={healthRetrying} onRetry={() => void retryHealth()} />
-            <StatusBar style="dark" translucent />
+            <StatusBar style="dark" />
           </SafeAreaView>
         </GestureHandlerRootView>
       </SafeAreaProvider>
@@ -148,17 +147,23 @@ export default function RootLayout() {
 
   return (
     <SafeAreaProvider>
-      <GestureHandlerRootView style={{ flex: 1, backgroundColor: "#000" }}>
+      <GestureHandlerRootView style={{ flex: 1, backgroundColor: safeAreaBackground }}>
+        <BottomSheetModalProvider>
         <KeyboardProvider>
-        <SafeAreaView edges={["bottom"]} style={{ flex: 1, backgroundColor: "#000" }}>
-          <View style={{ flex: 1, backgroundColor: "#F1F1F3" }}>
+        <SafeAreaView
+          edges={[]}
+          style={{ flex: 1, backgroundColor: safeAreaBackground }}
+        >
+          <View style={{ flex: 1, backgroundColor: isFullBleedRoute ? "transparent" : "#F1F1F3" }}>
             <AppQueryProvider>
               <HookLocationProvider>
                 <AuthSheetProvider>
-                  <ThemeProvider
-                    value={colorScheme === "dark" ? DarkTheme : DefaultTheme}
-                  >
-            <Stack>
+                  {/* Hook's UI is light-only (fixed #F1F1F3 surfaces, dark
+                      status bar), so the navigation theme is pinned rather
+                      than following the device — otherwise native chrome
+                      like the iOS tab bar flips appearance between screens. */}
+                  <ThemeProvider value={DefaultTheme}>
+            <Stack screenOptions={{ headerShown: false }}>
               <Stack.Screen
                 name="splash"
                 options={{
@@ -189,6 +194,7 @@ export default function RootLayout() {
               <Stack.Screen
                 name="(app)/notifications/[id]"
                 options={{
+                  headerShown: true,
                   presentation: "modal",
                   title: "Notification",
                   headerStyle: { backgroundColor: "#f1f1f3" },
@@ -233,6 +239,7 @@ export default function RootLayout() {
               <Stack.Screen name="(app)/profile/edit" options={{ headerShown: false }} />
               <Stack.Screen name="(app)/profile/security" options={{ headerShown: false }} />
               <Stack.Screen name="(app)/profile/devices" options={{ headerShown: false }} />
+              <Stack.Screen name="(app)/profile/delete-account" options={{ headerShown: false }} />
               <Stack.Screen
                 name="(app)/states"
                 options={{ headerShown: false, gestureEnabled: false }}
@@ -251,6 +258,10 @@ export default function RootLayout() {
               />
               <Stack.Screen
                 name="(app)/shop/[categoryId]"
+                options={{ headerShown: false }}
+              />
+              <Stack.Screen
+                name="(app)/legal/[type]"
                 options={{ headerShown: false }}
               />
               <Stack.Screen
@@ -306,13 +317,7 @@ export default function RootLayout() {
                 }}
               />
             </Stack>
-            {/*
-              Android is edge-to-edge (app.json android.edgeToEdgeEnabled), so the
-              app draws *under* the status bar and each screen pads by insets.top.
-              An opaque bar would sit on top of that padded header and clip it, so
-              the bar stays translucent and screens supply their own colour.
-            */}
-            <StatusBar animated style={isMarketHero ? "light" : "dark"} translucent />
+            <StatusBar animated style={isMarketHero ? "light" : "dark"} />
             <ToastProvider />
                   </ThemeProvider>
                 </AuthSheetProvider>
@@ -321,6 +326,7 @@ export default function RootLayout() {
           </View>
         </SafeAreaView>
         </KeyboardProvider>
+        </BottomSheetModalProvider>
       </GestureHandlerRootView>
     </SafeAreaProvider>
   );

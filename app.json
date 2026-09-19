@@ -5,18 +5,25 @@
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/images/app-icon.png",
-    "scheme": [
-      "hook",
-      "com.googleusercontent.apps.970939309798-beud2kvciukbrbpau74oosnmlf97de2r"
-    ],
-    "userInterfaceStyle": "automatic",
-    "newArchEnabled": true,
+    "scheme": "hook",
+    "userInterfaceStyle": "light",
     "ios": {
       "bundleIdentifier": "com.biodun42.hook",
       "supportsTablet": true,
       "usesAppleSignIn": true,
       "infoPlist": {
-        "NSFaceIDUsageDescription": "Hook uses Face ID to protect your account on this device."
+        "NSFaceIDUsageDescription": "Hook uses Face ID to protect your account on this device.",
+        "UIApplicationSceneManifest": {
+          "UIApplicationSupportsMultipleScenes": false,
+          "UISceneConfigurations": {
+            "UIWindowSceneSessionRoleApplication": [
+              {
+                "UISceneConfigurationName": "Default Configuration",
+                "UISceneDelegateClassName": "$(PRODUCT_MODULE_NAME).SceneDelegate"
+              }
+            ]
+          }
+        }
       }
     },
     "android": {
@@ -26,17 +33,15 @@
         "backgroundColor": "#FFC809",
         "foregroundImage": "./assets/images/adaptive-icon.png"
       },
-      "edgeToEdgeEnabled": true,
-      "predictiveBackGestureEnabled": false
+      "predictiveBackGestureEnabled": false,
+      "permissions": [
+        "android.permission.USE_BIOMETRIC",
+        "android.permission.USE_FINGERPRINT"
+      ]
     },
     "androidStatusBar": {
       "barStyle": "dark-content",
       "translucent": true
-    },
-    "androidNavigationBar": {
-      "backgroundColor": "#000000",
-      "barStyle": "light-content",
-      "enforceContrast": false
     },
     "web": {
       "output": "static",
@@ -70,7 +75,15 @@
             "backgroundColor": "#FFC809"
           }
         }
-      ]
+      ],
+      [
+        "@react-native-google-signin/google-signin",
+        {
+          "iosUrlScheme": "com.googleusercontent.apps.970939309798-beud2kvciukbrbpau74oosnmlf97de2r"
+        }
+      ],
+      "expo-image",
+      "expo-web-browser"
     ],
     "experiments": {
       "typedRoutes": true,
@@ -79,9 +92,9 @@
     "extra": {
       "router": {},
       "eas": {
-        "projectId": "232e0943-0dff-4d12-b34d-096be84e5dbb"
+        "projectId": "2f9f9545-f2d2-49f9-8e88-650d9ce14df6"
       }
     },
-    "owner": "biodundevv"
+    "owner": "biodun42"
   }
 }

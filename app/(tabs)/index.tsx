@@ -1,1 +1,1 @@
-export { MarketplaceHomeScreen as default } from '@/components/marketplace/MarketplaceHomeScreen';
+export { MarketplaceHomeScreen as default } from "@/components/marketplace/MarketplaceHomeScreen";

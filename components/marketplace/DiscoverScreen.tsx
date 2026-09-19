@@ -9,27 +9,31 @@ import {
   ScrollView,
   Text,
   TextInput,
+  useWindowDimensions,
   View,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { SvgXml } from "react-native-svg";
 import Animated, {
+  cancelAnimation,
   Extrapolation,
   interpolate,
   runOnJS,
   useAnimatedScrollHandler,
   useAnimatedStyle,
   useSharedValue,
+  withRepeat,
+  withTiming,
 } from "react-native-reanimated";
 
 import { CatalogProductCard } from "@/components/marketplace/CatalogProductCard";
 import { MarketSelectionSheet } from "@/components/marketplace/MarketSelectionSheet";
 import { ScallopedEdge } from "@/components/marketplace/ScallopedEdge";
-import { HookLoader } from "@/components/shared/HookLoader";
 import { HookBackButton } from "@/components/shared/HookBackButton";
 import { RemoteImage } from "@/components/shared/RemoteImage";
 import {
   type PublicCategory,
+  type PublicCatalogProduct,
   useDiscoverQuery,
   useMarketsQuery,
   useSearchSuggestionsQuery,
@@ -44,8 +48,62 @@ const ALL_CATEGORY_IMAGE = require("../../assets/images/discover/all-category.pn
 const MAGNIFIER_IMAGE = require("../../assets/images/discover/magnifier.png");
 const DEFAULT_CATEGORY_IMAGE = require("../../assets/images/figma/category-market-art.png");
 
+function DiscoverProductSkeleton({
+  layout,
+  cardWidth,
+}: {
+  layout: "grid" | "list";
+  cardWidth: number;
+}) {
+  const opacity = useSharedValue(0.48);
+
+  useEffect(() => {
+    opacity.value = withRepeat(withTiming(0.9, { duration: 720 }), -1, true);
+    return () => cancelAnimation(opacity);
+  }, [opacity]);
+
+  const pulseStyle = useAnimatedStyle(() => ({ opacity: opacity.value }));
+
+  if (layout === "list") {
+    return (
+      <View className="gap-3 px-4" accessibilityLabel="Loading products">
+        {Array.from({ length: 5 }).map((_, index) => (
+          <Animated.View
+            key={index}
+            className="h-[116px] flex-row rounded-[14px] bg-white p-2.5"
+            style={pulseStyle}
+          >
+            <View className="h-24 w-24 rounded-[11px] bg-black/[0.08]" />
+            <View className="flex-1 justify-center px-3">
+              <View className="h-4 w-4/5 rounded-full bg-black/[0.08]" />
+              <View className="mt-3 h-3 w-2/5 rounded-full bg-black/[0.06]" />
+              <View className="mt-3 h-4 w-1/3 rounded-full bg-[#FFC809]/30" />
+            </View>
+          </Animated.View>
+        ))}
+      </View>
+    );
+  }
+
+  return (
+    <View
+      className="flex-row flex-wrap gap-x-3 gap-y-[18px] px-4"
+      accessibilityLabel="Loading products"
+    >
+      {Array.from({ length: 6 }).map((_, index) => (
+        <Animated.View key={index} style={[{ width: cardWidth }, pulseStyle]}>
+          <View className="aspect-square rounded-t-[10px] rounded-b-[20px] bg-black/[0.08]" />
+          <View className="mt-2 h-3.5 w-4/5 rounded-full bg-black/[0.08]" />
+          <View className="mt-2 h-3.5 w-2/5 rounded-full bg-[#FFC809]/30" />
+        </Animated.View>
+      ))}
+    </View>
+  );
+}
+
 export function DiscoverScreen() {
   const insets = useSafeAreaInsets();
+  const { width: screenWidth } = useWindowDimensions();
   const { stateParams } = useHookLocation();
   const [search, setSearch] = useState("");
   const [debouncedSearch, setDebouncedSearch] = useState("");
@@ -82,6 +140,7 @@ export function DiscoverScreen() {
   const marketRows = markets.data || [];
   const selectedMarket = marketRows.find((market) => market.publicId === marketId);
   const products = discover.data?.products || [];
+  const gridCardWidth = Math.floor((screenWidth - 44) / 2);
 
   function handleSearchChange(value: string) {
     setSearch(value);
@@ -161,7 +220,20 @@ export function DiscoverScreen() {
 
   return (
     <View className="flex-1 bg-[#F1F1F3]">
-      <Animated.ScrollView
+      <Animated.FlatList<PublicCatalogProduct>
+        key={layout}
+        data={discover.isLoading ? [] : products}
+        numColumns={layout === "grid" ? 2 : 1}
+        keyExtractor={(product) => product.publicId}
+        renderItem={({ item: product }) => (
+          <View
+            className={layout === "list" ? "px-4" : ""}
+            style={layout === "grid" ? { flex: 1, maxWidth: gridCardWidth } : { width: "100%" }}
+          >
+            <CatalogProductCard product={product} variant="figma" displayMode={layout} />
+          </View>
+        )}
+        columnWrapperStyle={layout === "grid" ? { gap: 12, paddingHorizontal: 16 } : undefined}
         onScroll={onScroll}
         scrollEventThrottle={16}
         showsVerticalScrollIndicator={false}
@@ -175,8 +247,12 @@ export function DiscoverScreen() {
             progressViewOffset={insets.top + 8}
           />
         }
-        contentContainerStyle={{ paddingBottom: getHookTabBarContentInset(insets.bottom) }}
-      >
+        contentContainerStyle={{
+          paddingBottom: getHookTabBarContentInset(insets.bottom),
+          gap: layout === "grid" ? 18 : 12,
+        }}
+        ListHeaderComponent={(
+          <View>
         <View
           className="relative bg-[#FFD93E] px-4"
           style={{ paddingTop: insets.top + 10, paddingBottom: 32 }}
@@ -301,7 +377,6 @@ export function DiscoverScreen() {
           <ProductLayoutToggle value={layout} onChange={setLayout} />
         </View>
 
-        {discover.isLoading ? <HookLoader label="Finding products" className="py-20" /> : null}
         {discover.isError ? (
           <View className="mx-4 mt-8 items-center rounded-[20px] bg-white px-6 py-10">
             <Ionicons name="cloud-offline-outline" size={30} color="#777" />
@@ -320,16 +395,10 @@ export function DiscoverScreen() {
             <Text className="mt-2 text-center text-sm leading-5 text-black/50">Try another search, category, or market.</Text>
           </View>
         ) : null}
-        {products.length ? (
-          <View className={`mt-4 px-4 ${layout === "grid" ? "flex-row flex-wrap gap-x-[3.2%] gap-y-5" : "gap-3"}`}>
-            {products.map((product) => (
-              <View key={product.publicId} style={{ width: layout === "grid" ? "48.4%" : "100%" }}>
-                <CatalogProductCard product={product} variant="figma" displayMode={layout} />
-              </View>
-            ))}
           </View>
-        ) : null}
-      </Animated.ScrollView>
+        )}
+        ListEmptyComponent={discover.isLoading ? <DiscoverProductSkeleton layout={layout} cardWidth={gridCardWidth} /> : null}
+      />
 
       <MarketplaceCompactHeader
         visible={headerVisible}

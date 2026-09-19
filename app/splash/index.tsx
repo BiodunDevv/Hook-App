@@ -2,15 +2,17 @@ import { router } from "expo-router";
 import { StatusBar } from "expo-status-bar";
 import { useEffect, useRef, useState } from "react";
 import { Text, View } from "react-native";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { BackendUnavailableScreen } from "@/components/shared/BackendUnavailableScreen";
 import { checkHookHealth } from "@/lib/health";
-import { refreshSession } from "@/lib/api";
+import { resumeSession as refreshSession } from "@/lib/api";
 import { getOnboardingComplete, getPendingSignup, getSession } from "@/lib/session";
 
 const SPLASH_DELAY = 900;
 
 export default function SplashScreen() {
+  const insets = useSafeAreaInsets();
   const routed = useRef(false);
   const [backendAvailable, setBackendAvailable] = useState<boolean | null>(null);
   const [retrying, setRetrying] = useState(false);
@@ -107,7 +109,7 @@ export default function SplashScreen() {
   if (backendAvailable === false) {
     return (
       <View className="flex-1 bg-hook">
-        <StatusBar style="dark" translucent />
+        <StatusBar style="dark" />
         <BackendUnavailableScreen retrying={retrying} onRetry={() => void retryHealth()} />
       </View>
     );
@@ -124,7 +126,10 @@ export default function SplashScreen() {
           </Text>
         </Text>
       </View>
-      <View className="w-full items-center pb-8">
+      <View
+        className="w-full items-center"
+        style={{ paddingBottom: Math.max(insets.bottom, 32) }}
+      >
         <View className="mb-3 h-px w-8 bg-black/20" />
         <Text className="text-center text-[11px] font-bold uppercase tracking-[1.6px] text-black/60">
           Velaris Technologies Limited

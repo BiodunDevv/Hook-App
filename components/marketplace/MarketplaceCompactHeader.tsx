@@ -1,7 +1,9 @@
 import { Ionicons } from "@expo/vector-icons";
+import { centeredHeaderTextStyle } from "@/constants/design-tokens";
 import { router } from "expo-router";
 import Animated from "react-native-reanimated";
-import { Pressable, StyleProp, Text, View, ViewStyle } from "react-native";
+import { Pressable, Text, View } from "react-native";
+import type { ComponentProps } from "react";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { ScallopedEdge } from "./ScallopedEdge";
@@ -22,7 +24,7 @@ type MarketplaceCompactHeaderProps = {
   showActions?: boolean;
   visible?: boolean;
   plain?: boolean;
-  style?: StyleProp<ViewStyle>;
+  style?: ComponentProps<typeof Animated.View>["style"];
 };
 
 export function MarketplaceCompactHeader({
@@ -67,7 +69,6 @@ export function MarketplaceCompactHeader({
           shadowOffset: { width: 0, height: 4 },
           shadowOpacity: 0.06,
           shadowRadius: 12,
-          elevation: 8,
         },
         style,
       ]}
@@ -125,7 +126,7 @@ export function MarketplaceCompactHeader({
                 </Text>
               ) : null}
               <Text
-                className="max-w-[230px] flex-shrink text-center text-[15px] font-black leading-5 text-[#111]"
+                style={[centeredHeaderTextStyle, { maxWidth: 230, flexShrink: 1 }]}
               >
                 {title}
               </Text>

@@ -21,6 +21,7 @@ import { HookBackButton } from "@/components/shared/HookBackButton";
 import { toast } from "@/components/shared/toast";
 import { getProfile, updateProfile, uploadProfileImage } from "@/lib/auth-api";
 import { getSession, saveSession } from "@/lib/session";
+import { screenPadding } from "@/constants/design-tokens";
 
 type ProfileForm = {
   firstName: string;
@@ -127,7 +128,7 @@ export default function EditProfileScreen() {
           keyboardDismissMode={Platform.OS === "ios" ? "interactive" : "on-drag"}
           keyboardShouldPersistTaps="handled"
           showsVerticalScrollIndicator={false}
-          contentContainerStyle={{ paddingHorizontal: 16, paddingTop: 20, paddingBottom: insets.bottom + 40 }}
+          contentContainerStyle={{ paddingHorizontal: screenPadding, paddingTop: 20, paddingBottom: insets.bottom + 40 }}
         >
         <View className="items-center rounded-[20px] bg-[#FFF4C7] px-5 py-6">
           <View className="relative rounded-full bg-hook p-[3px]">

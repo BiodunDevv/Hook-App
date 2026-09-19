@@ -9,7 +9,7 @@ import { useResetPasswordMutation } from '@/lib/auth-api';
 import { registerPushToken } from '@/lib/push';
 import { saveSession } from '@/lib/session';
 
-const MIN_LENGTH = 9;
+import { PASSWORD_MIN_LENGTH as MIN_LENGTH } from '@/lib/password-policy';
 
 export function CreateNewPassword() {
   const { email = '', code = '' } = useLocalSearchParams<{ email?: string; code?: string }>();

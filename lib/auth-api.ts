@@ -1,13 +1,30 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useEffect } from 'react';
+import * as Device from 'expo-device';
+import { Platform } from 'react-native';
 
 import { API_BASE_URL, apiRequest } from '@/lib/api';
-import { getSession, onSessionChanged, type AuthSession } from '@/lib/session';
+import { getDeviceId, getSession, onSessionChanged, type AuthSession } from '@/lib/session';
 
 function compactBody<T extends Record<string, unknown>>(input: T) {
   return Object.fromEntries(
     Object.entries(input).filter(([, value]) => value !== undefined && value !== null && value !== ''),
   );
+}
+
+/**
+ * Every call that can create a session (password login, social login,
+ * signup completion, password reset) should tag the session with a real
+ * device name — otherwise the backend falls back to a generic "Hook
+ * device" label on the Your Devices screen for every session, on every
+ * device, always.
+ */
+async function deviceMetadata() {
+  return {
+    deviceId: await getDeviceId(),
+    deviceName: Device.deviceName || Device.modelName || undefined,
+    platform: Platform.OS,
+  };
 }
 
 export type AuthLookupResponse = {
@@ -59,12 +76,13 @@ export function resendSignupCode(signupSessionToken: string) {
   });
 }
 
-export function completeSignup(input: {
+export async function completeSignup(input: {
   signupSessionToken: string;
   firstName: string;
   lastName: string;
+  referralCode?: string;
 }) {
-  const body = input;
+  const body = { ...input, ...(await deviceMetadata()) };
   return apiRequest<AuthSession>('/auth/signup/complete', {
     auth: false,
     method: 'POST',
@@ -72,8 +90,8 @@ export function completeSignup(input: {
   });
 }
 
-export function login(input: { email: string; password: string }) {
-  const body = input;
+export async function login(input: { email: string; password: string }) {
+  const body = { ...input, ...(await deviceMetadata()) };
   return apiRequest<AuthSession>('/auth/login', {
     auth: false,
     method: 'POST',
@@ -82,8 +100,8 @@ export function login(input: { email: string; password: string }) {
   });
 }
 
-export function googleLogin(input: { idToken: string }) {
-  const body = input;
+export async function googleLogin(input: { idToken: string }) {
+  const body = { ...input, ...(await deviceMetadata()) };
   return apiRequest<AuthSession>('/auth/google', {
     auth: false,
     method: 'POST',
@@ -91,11 +109,12 @@ export function googleLogin(input: { idToken: string }) {
   });
 }
 
-export function appleLogin(input: { identityToken: string; firstName?: string; lastName?: string }) {
+export async function appleLogin(input: { identityToken: string; firstName?: string; lastName?: string }) {
+  const body = { ...input, ...(await deviceMetadata()) };
   return apiRequest<AuthSession>('/auth/apple', {
     auth: false,
     method: 'POST',
-    body: JSON.stringify(compactBody(input)),
+    body: JSON.stringify(compactBody(body)),
   });
 }
 
@@ -115,11 +134,12 @@ export function verifyPasswordReset(input: { email: string; code: string }) {
   });
 }
 
-export function resetPassword(input: { email: string; code: string; password: string }) {
+export async function resetPassword(input: { email: string; code: string; password: string }) {
+  const body = { ...input, ...(await deviceMetadata()) };
   return apiRequest<AuthSession>('/auth/password/reset', {
     auth: false,
     method: 'POST',
-    body: JSON.stringify(input),
+    body: JSON.stringify(body),
   });
 }
 

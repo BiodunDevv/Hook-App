@@ -5,7 +5,6 @@ import {
   Image,
   KeyboardAvoidingView,
   Platform,
-  Pressable,
   ScrollView,
   Text,
   View,
@@ -15,7 +14,7 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import passwordIcon from "@/assets/images/auth/password.png";
 import { AuthGlowBackground } from "@/components/shared/glow-background";
 import { GlassButton } from "@/components/shared/GlassButton";
-import { HookLoader } from "@/components/shared/HookLoader";
+import { Button } from "@/components/ui/button";
 
 export function AuthScreenShell({
   children,
@@ -109,26 +108,5 @@ export function AuthPrimaryButton({
   onPress: () => void;
 }) {
   const isDisabled = disabled || loading;
-  return (
-    <Pressable
-      accessibilityRole="button"
-      className={`h-[52px] items-center justify-center rounded-full ${
-        isDisabled && !loading
-          ? "bg-[rgba(255,200,9,0.28)] opacity-60"
-          : "bg-hook opacity-100"
-      }`}
-      disabled={isDisabled}
-      onPress={onPress}
-    >
-      {loading ? (
-        <HookLoader size="button" variant="dark" />
-      ) : (
-        <Text
-          className={`text-sm font-medium ${disabled ? "text-black/35" : "text-black"}`}
-        >
-          {label}
-        </Text>
-      )}
-    </Pressable>
-  );
+  return <Button title={label} disabled={isDisabled} loading={loading} onPress={onPress} />;
 }

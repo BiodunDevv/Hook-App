@@ -1,7 +1,8 @@
 import { Ionicons } from "@expo/vector-icons";
-import type { BottomTabBarProps } from "@react-navigation/bottom-tabs";
+import type { BottomTabBarProps } from "expo-router/build/react-navigation/bottom-tabs/types";
 import * as Haptics from "expo-haptics";
 import { router } from "expo-router";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useEffect, useState } from "react";
 import {
   type LayoutChangeEvent,
@@ -15,7 +16,8 @@ import Animated, {
   useSharedValue,
   withSpring,
 } from "react-native-reanimated";
-import { getCartItems, useCartQuery } from "@/lib/mobile-api";
+import { getCartItems, useCartQuery, useNegotiationsQuery } from "@/lib/mobile-api";
+import { countActiveNegotiations } from "@/lib/negotiations";
 import { useLocalSessionQuery } from "@/lib/auth-api";
 import { useAuthSheet } from "@/components/auth/AuthSheetProvider";
 import {
@@ -38,6 +40,8 @@ const tabs: Record<string, TabItemConfig> = {
   profile: { label: "Profile", icon: "person-outline", active: "person" },
 };
 
+const mainTabNames = new Set(Object.keys(tabs));
+
 const spring = {
   damping: 22,
   stiffness: 240,
@@ -50,12 +54,14 @@ function AnimatedTabItem({
   onPress,
   onLongPress,
   accessibilityLabel,
+  badgeCount = 0,
 }: {
   selected: boolean;
   item: TabItemConfig;
   onPress: () => void;
   onLongPress: () => void;
   accessibilityLabel?: string;
+  badgeCount?: number;
 }) {
   const scale = useSharedValue(1);
   const lift = useSharedValue(0);
@@ -86,11 +92,20 @@ function AnimatedTabItem({
       style={styles.tabSlot}
     >
       <Animated.View style={[styles.tabContent, animatedStyle]}>
-        <Ionicons
-          name={selected ? item.active : item.icon}
-          size={21}
-          color={selected ? "#111" : "#B2B2B5"}
-        />
+        <View>
+          <Ionicons
+            name={selected ? item.active : item.icon}
+            size={21}
+            color={selected ? "#111" : "#B2B2B5"}
+          />
+          {badgeCount > 0 ? (
+            <View className="absolute -right-2 -top-1 min-w-4 items-center justify-center rounded-full border-2 border-white bg-[#FFC809] px-1">
+              <Text allowFontScaling={false} className="text-[9px] font-black text-black">
+                {badgeCount > 99 ? "99+" : badgeCount}
+              </Text>
+            </View>
+          ) : null}
+        </View>
         <Text
           allowFontScaling={false}
           style={[styles.tabLabel, { color: selected ? "#111" : "#B2B2B5" }]}
@@ -107,25 +122,36 @@ export function HookTabBar({
   descriptors,
   navigation,
 }: BottomTabBarProps) {
+  const insets = useSafeAreaInsets();
   const cart = useCartQuery();
+  const negotiations = useNegotiationsQuery();
   const session = useLocalSessionQuery();
   const { openAuth } = useAuthSheet();
   const cartCount = getCartItems(cart.data).reduce(
     (sum, item) => sum + Number(item.quantity || 0),
     0,
   );
+  const activeNegotiations = countActiveNegotiations(
+    Array.isArray(negotiations.data) ? negotiations.data : [],
+  );
+  const mainRoutes = state.routes.filter((route) => mainTabNames.has(route.name));
+  const activeRoute = state.routes[state.index];
+  const activeMainIndex = mainRoutes.findIndex(
+    (route) => route.key === activeRoute?.key,
+  );
+  const cartSelected = activeRoute?.name === "cart";
   const [width, setWidth] = useState(0);
-  const slot = width && state.routes.length ? width / state.routes.length : 0;
+  const slot = width && mainRoutes.length ? width / mainRoutes.length : 0;
   const activeWidth = Math.max(66, Math.min(slot - 5, 94));
   const activeOffset = useSharedValue(0);
 
   useEffect(() => {
-    if (!slot) return;
+    if (!slot || activeMainIndex < 0) return;
     activeOffset.value = withSpring(
-      state.index * slot + (slot - activeWidth) / 2,
+      activeMainIndex * slot + (slot - activeWidth) / 2,
       spring,
     );
-  }, [activeOffset, activeWidth, slot, state.index]);
+  }, [activeMainIndex, activeOffset, activeWidth, slot]);
 
   const indicatorStyle = useAnimatedStyle(() => ({
     transform: [{ translateX: activeOffset.value }],
@@ -135,10 +161,12 @@ export function HookTabBar({
     setWidth(Math.round(event.nativeEvent.layout.width));
   };
 
+  if (cartSelected) return null;
+
   return (
     <View
       pointerEvents="box-none"
-      style={styles.safeArea}
+      style={[styles.safeArea, { bottom: insets.bottom + HOOK_TAB_BAR_BOTTOM_GAP }]}
     >
       <View pointerEvents="box-none" className="flex-row items-center gap-2 px-3">
         <View
@@ -146,16 +174,16 @@ export function HookTabBar({
           className="relative flex-1 flex-row overflow-hidden rounded-[31px] bg-white px-1"
           style={[styles.navigation, styles.shadow]}
         >
-          {slot ? (
+          {slot && activeMainIndex >= 0 ? (
             <Animated.View
               pointerEvents="none"
               className="absolute bottom-1 top-1 rounded-[25px] bg-[#FFC809]"
               style={[{ width: activeWidth }, indicatorStyle]}
             />
           ) : null}
-          {state.routes.map((route) => {
-            const selected = state.routes[state.index].key === route.key;
-            const item = tabs[route.name] || tabs.index;
+          {mainRoutes.map((route) => {
+            const selected = activeRoute?.key === route.key;
+            const item = tabs[route.name];
             const options = descriptors[route.key].options;
 
             return (
@@ -163,6 +191,7 @@ export function HookTabBar({
                 key={route.key}
                 selected={selected}
                 item={item}
+                badgeCount={route.name === "messages" ? activeNegotiations : 0}
                 accessibilityLabel={options.tabBarAccessibilityLabel}
                 onLongPress={() =>
                   navigation.emit({ type: "tabLongPress", target: route.key })
@@ -190,11 +219,16 @@ export function HookTabBar({
         <Pressable
           accessibilityLabel={`Open cart${cartCount ? `, ${cartCount} items` : ""}`}
           accessibilityRole="button"
-          onPress={() => router.push("/cart" as never)}
-          className="items-center justify-center rounded-full bg-white"
+          accessibilityState={{ selected: cartSelected }}
+          onPress={() => router.push("/(app)/cart" as never)}
+          className={`items-center justify-center rounded-full ${cartSelected ? "bg-[#FFC809]" : "bg-white"}`}
           style={[styles.cartButton, styles.shadow]}
         >
-          <Ionicons name="bag-handle-outline" size={23} color="#111" />
+          <Ionicons
+            name={cartSelected ? "bag-handle" : "bag-handle-outline"}
+            size={23}
+            color="#111"
+          />
           {cartCount > 0 ? (
             <View className="absolute right-0.5 top-0.5 min-w-5 items-center justify-center rounded-full border-2 border-white bg-[#FFC809] px-1">
               <Text className="text-[10px] font-black text-black">
@@ -215,7 +249,6 @@ const styles = StyleSheet.create({
     left: 0,
     right: 0,
     zIndex: 100,
-    elevation: 30,
   },
   navigation: { height: HOOK_TAB_BAR_HEIGHT },
   tabSlot: {
@@ -245,6 +278,5 @@ const styles = StyleSheet.create({
     shadowOffset: { width: 0, height: 3 },
     shadowOpacity: 0.16,
     shadowRadius: 14,
-    elevation: 14,
   },
 });

@@ -1,18 +1,29 @@
 import { Ionicons } from "@expo/vector-icons";
-import * as Crypto from "expo-crypto";
 import * as WebBrowser from "expo-web-browser";
+import { setPaymentFlowActive } from "@/lib/payment-flow";
 import { router } from "expo-router";
-import { useState } from "react";
-import { Pressable, ScrollView, Text, View } from "react-native";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { Pressable, ScrollView, Text, TextInput, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
-import { HookSheet } from "@/components/shared/HookSheet";
+import { BottomActionBar, BottomActionButton } from "@/components/shared/BottomActionBar";
+import { Button } from "@/components/ui/button";
 import { useAuthSheet } from "@/components/auth/AuthSheetProvider";
-import { HookLoader } from "@/components/shared/HookLoader";
 import { HookPageLoading } from "@/components/shared/HookPageLoading";
-import { HookBackButton } from "@/components/shared/HookBackButton";
+import { HookPageHeader } from "@/components/shared/HookPageHeader";
 import { toast } from "@/components/shared/toast";
-import { apiRequest } from "@/lib/api";
+import { CheckoutSteps } from "@/components/checkout/CheckoutSteps";
+import { AppliedCouponCard } from "@/components/checkout/AppliedCouponCard";
+import { CheckoutRow } from "@/components/checkout/CheckoutRow";
+import { DeliveryAddressSheet, type AddressRow } from "@/components/checkout/DeliveryAddressSheet";
+import { LogisticsSheet } from "@/components/checkout/LogisticsSheet";
+import { PaymentMethodSheet } from "@/components/checkout/PaymentMethodSheet";
+import { ReviewOrderSection } from "@/components/checkout/ReviewOrderSection";
+import { OrderTotals } from "@/components/checkout/OrderTotals";
+import { PaymentProcessingScreen, type PaymentStage } from "@/components/checkout/PaymentProcessingScreen";
+import { isAmbiguousFailure } from "@/lib/api";
+import { releaseIdempotencyKey, stableIdempotencyKey } from "@/lib/idempotency";
+import { waitForPaymentConfirmation } from "@/lib/payment-status";
 import {
   useAddressesQuery,
   useCartQuery,
@@ -21,404 +32,475 @@ import {
   useCheckoutPreviewMutation,
   useCommerceConfigQuery,
   useCreatePaymentLinkMutation,
+  useCreditsQuery,
   useCustomerSessionQuery,
+  useLogisticsProvidersQuery,
+  useValidateCouponMutation,
+  type LogisticsProvider,
 } from "@/lib/mobile-api";
 import { isCustomerSession } from "@/lib/session";
+import { calculateHookCoinEarnMinor } from "@/lib/hook-coin";
 
-type PaymentMethod = "PREPAID" | "PAY_AT_HANDOVER";
+const VAT_RATE = 0.075;
 
 export default function CheckoutScreen() {
   const insets = useSafeAreaInsets();
   const session = useCustomerSessionQuery();
   const { openAuth } = useAuthSheet();
+  const signedIn = isCustomerSession(session.data);
+
   const cart = useCartQuery();
   const addresses = useAddressesQuery();
   const config = useCommerceConfigQuery();
+  const logistics = useLogisticsProvidersQuery(signedIn);
+  const credits = useCreditsQuery(signedIn);
   const preview = useCheckoutPreviewMutation();
   const confirm = useCheckoutConfirmMutation();
   const createPaymentLink = useCreatePaymentLinkMutation();
-  const [addressId, setAddressId] = useState<string>();
-  const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>("PREPAID");
-  const [acceptedPolicies, setAcceptedPolicies] = useState(false);
-  const [addressPromptVisible, setAddressPromptVisible] = useState(false);
-  const addressRows = Array.isArray(addresses.data) ? addresses.data : [];
-  const selectedAddress =
-    addressRows.find((item) => item.publicId === addressId)?.publicId ||
-    addressRows.find((item) => item.isDefault)?.publicId ||
-    addressRows[0]?.publicId;
-  const cartItems = getCartItems(cart.data);
-  const busy = preview.isPending || confirm.isPending || createPaymentLink.isPending;
+  const validateCoupon = useValidateCouponMutation();
 
-  if (!session.isLoading && !isCustomerSession(session.data)) {
+  const [addressId, setAddressId] = useState<string>();
+  const [deliveryNote, setDeliveryNote] = useState("");
+  const [provider, setProvider] = useState<LogisticsProvider>();
+  const [useCredits, setUseCredits] = useState(false);
+  const creditPreferenceTouched = useRef(false);
+  const [couponInput, setCouponInput] = useState("");
+  const [coupon, setCoupon] = useState<{ code: string; discountMinor: number; appliesToDelivery: boolean }>();
+  const [acceptedPolicies, setAcceptedPolicies] = useState(false);
+  const [paymentChosen, setPaymentChosen] = useState(false);
+  const [sheet, setSheet] = useState<"address" | "logistics" | "payment" | null>(null);
+  // Set once checkout is submitted; survives the cart being emptied by confirm.
+  const [paymentStage, setPaymentStage] = useState<PaymentStage | null>(null);
+
+  const addressRows = (Array.isArray(addresses.data) ? addresses.data : []) as AddressRow[];
+  const selectedAddress =
+    addressRows.find((item) => item.publicId === addressId)
+    || addressRows.find((item) => item.isDefault)
+    || addressRows[0];
+  const cartItems = getCartItems(cart.data);
+  const providers = logistics.data || [];
+  const podPaused = Boolean((config.data as { podPaused?: boolean } | undefined)?.podPaused);
+
+  // Hook Coin is applied by default as soon as the wallet is available. A
+  // customer's explicit choice is then preserved for the rest of this
+  // checkout, even if the wallet query refreshes in the background.
+  useEffect(() => {
+    if (!credits.isSuccess) return;
+    const hasSpendableBalance = Number(credits.data?.balanceMinor || 0) > 0;
+    if (!hasSpendableBalance) {
+      setUseCredits(false);
+      return;
+    }
+    if (!creditPreferenceTouched.current) setUseCredits(true);
+  }, [credits.data?.balanceMinor, credits.isSuccess]);
+
+  function handleToggleCredits(next: boolean) {
+    creditPreferenceTouched.current = true;
+    setUseCredits(next);
+  }
+
+  // Mirrors CheckoutService.calculateMoney so the figures shown here match the
+  // server's quote. The server stays the source of truth — this is only so the
+  // customer sees live totals while picking options.
+  const money = useMemo(() => {
+    const subtotalMinor = cartItems.reduce(
+      (sum, item) => sum + Number(item.totalPriceMinor ?? Number(item.unitPriceMinor || 0) * Number(item.quantity || 0)),
+      0,
+    );
+    const grossDeliveryMinor = Number(provider?.feeMinor || 0);
+    const couponDiscountMinor = coupon?.discountMinor || 0;
+    const deliveryDiscount = coupon?.appliesToDelivery ? couponDiscountMinor : 0;
+    const itemDiscount = coupon?.appliesToDelivery ? 0 : couponDiscountMinor;
+    const deliveryFeeMinor = Math.max(0, grossDeliveryMinor - deliveryDiscount);
+    const vatMinor = Math.round(Math.max(0, subtotalMinor - itemDiscount) * VAT_RATE);
+    const payableBeforeCredits = Math.max(0, subtotalMinor - itemDiscount + vatMinor + deliveryFeeMinor);
+
+    const capPercent = credits.data?.capPercent ?? 20;
+    const balanceMinor = credits.data?.balanceMinor ?? 0;
+    const creditsAppliedMinor = useCredits
+      ? Math.min(balanceMinor, Math.floor((subtotalMinor * capPercent) / 100), payableBeforeCredits)
+      : 0;
+
+    return {
+      subtotalMinor,
+      vatMinor,
+      deliveryFeeMinor,
+      couponDiscountMinor,
+      creditsAppliedMinor,
+      totalMinor: Math.max(0, payableBeforeCredits - creditsAppliedMinor),
+      payableBeforeCredits,
+    };
+  }, [cartItems, provider, coupon, useCredits, credits.data]);
+
+  const busy = preview.isPending || confirm.isPending || createPaymentLink.isPending;
+  const estimatedEarnMinor = calculateHookCoinEarnMinor(money.subtotalMinor, config.data);
+
+  if (!session.isLoading && !signedIn) {
     return (
-      <View className="flex-1 items-center justify-center bg-[#f4f4f5] px-8">
+      <View className="flex-1 items-center justify-center bg-[#f1f1f3] px-8">
         <View className="h-16 w-16 items-center justify-center rounded-full bg-hook">
           <Ionicons name="lock-closed-outline" size={27} color="#111" />
         </View>
         <Text className="mt-5 text-center text-2xl font-black text-black">Sign in to checkout</Text>
-        <Text className="mt-2 text-center text-sm leading-5 text-[#666]">Your local cart will be added to your Hook account before checkout.</Text>
-        <Pressable onPress={() => openAuth("/checkout" as never)} className="mt-6 h-[52px] w-full items-center justify-center rounded-full bg-hook">
-          <Text className="font-black text-black">Continue</Text>
-        </Pressable>
+        <Text className="mt-2 text-center text-sm leading-5 text-[#666]">
+          Your local cart will be added to your Hook account before checkout.
+        </Text>
+        <Button title="Continue" onPress={() => openAuth("/checkout" as never)} className="mt-6 w-full" />
       </View>
     );
   }
 
-  function openAddressPrompt() {
-    setAddressPromptVisible(true);
-  }
-
-  function openAddresses() {
-    setAddressPromptVisible(false);
-    router.push("/addresses" as never);
-  }
-
-  function choosePaymentMethod(method: PaymentMethod) {
-    if (!selectedAddress) {
-      openAddressPrompt();
-      return;
+  async function applyCoupon() {
+    const code = couponInput.trim().toUpperCase();
+    if (!code) return;
+    try {
+      const result = await validateCoupon.mutateAsync({
+        code,
+        subtotalMinor: money.subtotalMinor,
+        deliveryFeeMinor: Number(provider?.feeMinor || 0),
+      });
+      setCoupon({
+        code: result.code,
+        discountMinor: result.discountMinor,
+        appliesToDelivery: result.appliesToDelivery,
+      });
+      toast.success("Coupon applied");
+    } catch (error) {
+      setCoupon(undefined);
+      toast.error(error instanceof Error ? error.message : "That coupon could not be applied");
     }
-    setPaymentMethod(method);
+  }
+
+  function removeCoupon() {
+    setCoupon(undefined);
+    setCouponInput("");
   }
 
   async function placeOrder() {
     if (!cartItems.length) return toast.error("Your cart is empty");
     if (!selectedAddress) {
-      openAddressPrompt();
-      return;
+      setSheet("address");
+      return toast.info("Choose where we should deliver first");
     }
+    if (!provider) {
+      setSheet("logistics");
+      return toast.info("Choose a delivery option to continue");
+    }
+    if (!paymentChosen) { setSheet("payment"); return; }
     const policyVersions = config.data?.policyVersions;
-    if (
-      !policyVersions?.TERMS ||
-      !policyVersions?.PRIVACY ||
-      !policyVersions?.RETURNS
-    )
+    if (!policyVersions?.TERMS || !policyVersions?.PRIVACY || !policyVersions?.RETURNS)
       return toast.error("Checkout policies are temporarily unavailable");
-    if (!acceptedPolicies)
-      return toast.error("Accept the current Hook policies to continue");
+    const acceptedPolicyVersions = {
+      TERMS: policyVersions.TERMS,
+      PRIVACY: policyVersions.PRIVACY,
+      RETURNS: policyVersions.RETURNS,
+    };
+    if (!acceptedPolicies) return toast.error("Accept the current Hook policies to continue");
+
     try {
+      setPaymentStage("creating");
       const summary = await preview.mutateAsync({
-        addressId: selectedAddress,
+        addressId: selectedAddress.publicId,
         deliveryMethod: "HOME_DELIVERY",
-        paymentMethod,
-        policyVersions,
+        paymentMethod: "PREPAID",
+        policyVersions: acceptedPolicyVersions,
+        logisticsProviderId: provider.publicId || provider.id,
+        couponCode: coupon?.code,
+        useCredits,
       });
-      const order = await confirm.mutateAsync({
-        previewToken: summary.previewToken,
-        idempotencyKey: Crypto.randomUUID(),
-      });
-      if (paymentMethod === "PAY_AT_HANDOVER") {
-        toast.success(
-          order.commerceStatus === "VERIFICATION_PENDING"
-            ? "Order sent for high-value review"
-            : "Order sent for confirmation",
-        );
-        router.replace({
-          pathname: "/orders/[id]",
-          params: { id: order.id },
-        } as never);
-        return;
+      // One key per logical checkout, stored on the device. A retry after a
+      // timeout, remount or app restart reuses it, so the server returns the
+      // order it already created instead of making a second one.
+      const idempotencyKey = await stableIdempotencyKey(
+        "checkout.confirm",
+        JSON.stringify({
+          address: selectedAddress.publicId,
+          provider: provider.publicId || provider.id,
+          coupon: coupon?.code ?? null,
+          credits: Boolean(useCredits),
+          items: cartItems.map((item: any) => [item.id ?? item.publicId, item.quantity]),
+        }),
+      );
+      let order;
+      try {
+        order = await confirm.mutateAsync({ previewToken: summary.previewToken, idempotencyKey });
+      } catch (error) {
+        // A definite rejection (e.g. balance changed) frees the key so the
+        // corrected checkout can run; an ambiguous one keeps it for the retry.
+        if (!isAmbiguousFailure(error)) await releaseIdempotencyKey("checkout.confirm");
+        else toast.info("We could not confirm your order went through. Tap Place order again: you will not be charged twice.");
+        throw error;
       }
+      await releaseIdempotencyKey("checkout.confirm");
+
       const paymentLink = await createPaymentLink.mutateAsync({ orderId: order.id });
-      if (!paymentLink.url)
-        throw new Error("Secure payment checkout is unavailable");
+      if (!paymentLink.url) throw new Error("Secure payment checkout is unavailable");
+      setPaymentStage("redirecting");
       const checkoutUrl = new URL(paymentLink.url);
       checkoutUrl.searchParams.set("appReturn", "1");
+      setPaymentFlowActive(true);
       const browserResult = await WebBrowser.openAuthSessionAsync(
         checkoutUrl.toString(),
         "hook://payments/return",
       );
       await WebBrowser.dismissBrowser();
       if (browserResult.type === "cancel" || browserResult.type === "dismiss") {
-        router.replace({
-          pathname: "/payments/[id]",
-          params: { id: order.id },
-        } as never);
+        router.replace({ pathname: "/payments/[id]", params: { id: order.id } } as never);
         return;
       }
-      for (let attempt = 0; attempt < 8; attempt += 1) {
-        const status = await apiRequest<any>(`/payments/${order.id}`);
-        if (String(status.payment?.status || "").toUpperCase() === "CONFIRMED") {
-          toast.success("Payment confirmed");
-          router.replace({
-            pathname: "/payments/[id]",
-            params: { id: order.id },
-          } as never);
-          return;
-        }
-        await new Promise((resolve) => setTimeout(resolve, 2000));
+      setPaymentStage("confirming");
+      const outcome = await waitForPaymentConfirmation(order.id);
+      if (outcome === "confirmed") {
+        toast.success("Payment confirmed");
+        router.replace({ pathname: "/payments/[id]", params: { id: order.id } } as never);
+        return;
       }
       toast.info("Payment confirmation is still processing");
-      router.replace({
-        pathname: "/payments/[id]",
-        params: { id: order.id },
-      } as never);
+      router.replace({ pathname: "/payments/[id]", params: { id: order.id } } as never);
     } catch (error) {
-      toast.error(
-        error instanceof Error
-          ? error.message
-          : "Checkout could not be completed",
-      );
+      setPaymentStage(null);
+      toast.error(error instanceof Error ? error.message : "Checkout could not be completed");
+    } finally {
+      setPaymentFlowActive(false);
     }
   }
 
+  if (paymentStage) return <PaymentProcessingScreen stage={paymentStage} />;
+
   if (cart.isLoading || addresses.isLoading || config.isLoading)
     return <HookPageLoading title="Checkout" label="Preparing checkout" />;
+
   if (!cartItems.length)
     return (
-      <View className="flex-1 items-center justify-center bg-[#f4f4f5] px-8">
+      <View className="flex-1 items-center justify-center bg-[#f1f1f3] px-8">
         <Text className="text-xl font-black">Your cart is empty</Text>
-        <Pressable
-          onPress={() => router.replace("/cart")}
-          className="mt-5 rounded-full bg-hook px-6 py-3"
-        >
-          <Text className="font-bold">Back to cart</Text>
+        <Pressable onPress={() => router.replace("/(app)/cart")} className="mt-5 rounded-full bg-hook px-6 py-3">
+          <Text className="font-bold text-black">Browse Hook</Text>
         </Pressable>
       </View>
     );
 
+  const addressLabel = selectedAddress
+    ? [selectedAddress.line1, selectedAddress.cityName].filter(Boolean).join(", ")
+      || selectedAddress.label
+      || selectedAddress.recipientName
+    : undefined;
+  const readyForPayment = Boolean(selectedAddress && provider && paymentChosen);
+
+  function openPolicy(type: "terms" | "privacy" | "returns") {
+    router.push(`/legal/${type}?from=checkout` as never);
+  }
+
   return (
-    <View className="flex-1 bg-[#f4f4f5]" style={{ paddingTop: insets.top }}>
+    <View style={{ flex: 1, backgroundColor: "#F1F1F3", paddingTop: insets.top }}>
+      <View style={{ paddingHorizontal: 16, paddingTop: 12, paddingBottom: 12 }}>
+        <HookPageHeader title="Checkout" centered />
+      </View>
       <ScrollView
-        contentInsetAdjustmentBehavior="never"
-        keyboardDismissMode="on-drag"
-        keyboardShouldPersistTaps="handled"
-        showsVerticalScrollIndicator={false}
+        style={{ flex: 1 }}
         contentContainerStyle={{
           padding: 16,
-          paddingBottom: insets.bottom + 120,
+          // Clears the 52pt floating action without leaving a large empty
+          // band after the consent card on taller phones.
+          paddingBottom: Math.max(insets.bottom, 12) + 72,
         }}
+        showsVerticalScrollIndicator={false}
+        keyboardShouldPersistTaps="handled"
+        automaticallyAdjustKeyboardInsets
+        contentInsetAdjustmentBehavior="never"
       >
-        <View className="flex-row items-center gap-3">
-          <HookBackButton />
-          <View>
-            <Text className="text-2xl font-black">Checkout</Text>
-            <Text className="text-xs text-[#666]">
-              {cartItems.length} product{cartItems.length === 1 ? "" : "s"} · one order
-            </Text>
-          </View>
+        <View style={{ marginTop: 8 }}>
+          <CheckoutSteps step={2} />
         </View>
-        <Section
-          title="Delivery address"
-          action="Manage"
-          onAction={openAddresses}
-        >
-          {addressRows.length ? (
-            <View className="gap-2">
-              {addressRows.map((address) => (
-                <Pressable
-                  key={address.publicId}
-                  onPress={() => setAddressId(address.publicId)}
-                  className={`rounded-2xl border p-4 ${selectedAddress === address.publicId ? "border-hook bg-[#fff9df]" : "border-black/5 bg-[#fafafa]"}`}
-                >
-                  <Text className="font-black">{address.label}</Text>
-                  <Text className="mt-1 text-sm text-[#666]">
-                    {address.line1}
-                  </Text>
-                  <Text className="mt-1 text-xs text-[#888]">
-                    {address.recipientName} · {address.phone}
-                  </Text>
-                </Pressable>
-              ))}
-            </View>
-          ) : (
-            <View className="rounded-2xl border border-hook/30 bg-[#fff9df] p-4">
-              <View className="flex-row items-start">
-                <View className="h-10 w-10 items-center justify-center rounded-full bg-hook">
-                  <Ionicons name="location" size={19} color="#111" />
-                </View>
-                <View className="ml-3 flex-1">
-                  <Text className="font-black text-black">
-                    Delivery address required
-                  </Text>
-                  <Text className="mt-1 text-xs leading-5 text-black/60">
-                    Add a verified address so Hook can confirm coverage and calculate your delivery fee.
-                  </Text>
-                </View>
+
+        <View style={{ marginTop: 24, gap: 10 }}>
+          <Text className="text-base font-medium text-black">Delivery to</Text>
+          <CheckoutRow
+            placeholder="Choose location for delivery"
+            value={addressLabel}
+            onPress={() => setSheet("address")}
+          />
+          <CheckoutRow
+            placeholder={logistics.isError ? "Couldn’t load logistics · Tap to retry" : "Choose logistics"}
+            value={provider?.name}
+            loading={logistics.isFetching}
+            onPress={() => { setSheet("logistics"); if (logistics.isError) void logistics.refetch(); }}
+          />
+        </View>
+
+        <View style={{ marginTop: 24, gap: 10 }}>
+          <Text className="text-base font-medium text-black">Payment</Text>
+          <CheckoutRow placeholder="Choose payment method" value={paymentChosen ? "Pay now" : undefined} onPress={() => setSheet("payment")} />
+          {money.creditsAppliedMinor > 0 ? (
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel={`Hook Coin is on. ${Math.round(money.creditsAppliedMinor / 100).toLocaleString("en-NG")} naira will be applied automatically. Tap to change.`}
+              onPress={() => setSheet("payment")}
+              style={{ flexDirection: "row", alignItems: "center", gap: 10, borderRadius: 14, borderWidth: 1, borderColor: "#E9B900", backgroundColor: "#FFF9E5", paddingHorizontal: 14, paddingVertical: 11 }}
+            >
+              <View style={{ height: 28, width: 28, alignItems: "center", justifyContent: "center", borderRadius: 14, backgroundColor: "#FFC809" }}>
+                <Ionicons name="wallet-outline" size={16} color="#111" />
               </View>
+              <View style={{ flex: 1 }}>
+                <Text style={{ fontSize: 13, fontFamily: "NunitoSans-Bold", color: "#111" }}>Hook Coin is on</Text>
+                <Text style={{ marginTop: 1, fontSize: 12, lineHeight: 17, color: "#666" }}>
+                  ₦{Math.round(money.creditsAppliedMinor / 100).toLocaleString("en-NG")} will be used automatically.
+                </Text>
+              </View>
+              <Text style={{ fontSize: 12, fontFamily: "NunitoSans-Bold", color: "#7A6200" }}>Change</Text>
+            </Pressable>
+          ) : null}
+        </View>
+
+        <View style={{ marginTop: 24, gap: 10 }}>
+          <Text className="text-base font-medium text-black">Coupon</Text>
+          {coupon ? (
+            <AppliedCouponCard {...coupon} onRemove={removeCoupon} />
+          ) : (
+            <View style={{ minHeight: 52, flexDirection: "row", alignItems: "center", borderRadius: 18, backgroundColor: "white", paddingHorizontal: 16, paddingVertical: 8, gap: 8 }}>
+              <TextInput
+                value={couponInput}
+                onChangeText={(value) => setCouponInput(value.toUpperCase())}
+                placeholder="Have a coupon code?"
+                placeholderTextColor="#3a3a3a"
+                autoCapitalize="characters"
+                autoCorrect={false}
+                returnKeyType="done"
+                onSubmitEditing={() => void applyCoupon()}
+                className="flex-1 text-base text-black"
+                style={{ flex: 1, minHeight: 36, color: "#111", fontSize: 15 }}
+              />
               <Pressable
                 accessibilityRole="button"
-                onPress={openAddresses}
-                className="mt-4 h-11 items-center justify-center rounded-full bg-black"
+                disabled={!couponInput.trim() || validateCoupon.isPending}
+                onPress={() => void applyCoupon()}
+                className={`rounded-[5px] px-2.5 py-1.5 ${couponInput.trim() ? "bg-[#ffdd66]" : "bg-black/5"}`}
               >
-                <Text className="text-sm font-bold text-white">
-                  Add delivery address
-                </Text>
+                <Text className="text-xs text-[#3a3a3a]">{validateCoupon.isPending ? "..." : "Apply"}</Text>
               </Pressable>
             </View>
           )}
-        </Section>
-        <Section title="Payment">
-          <View className="gap-2">
-            <PaymentChoice
-              active={paymentMethod === "PREPAID"}
-              title="Pay now"
-              description="Complete payment securely with Paystack."
-              onPress={() => choosePaymentMethod("PREPAID")}
-            />
-            <PaymentChoice
-              active={paymentMethod === "PAY_AT_HANDOVER"}
-              title="Pay at handover"
-              description="Subject to coverage, account and Operations approval."
-              disabled={!config.data?.podEnabled}
-              onPress={() => choosePaymentMethod("PAY_AT_HANDOVER")}
-            />
-          </View>
-        </Section>
-        <Section title="Order summary">
-          <Row label="Products" value={Number((cart.data as any)?.subtotalMinor || 0)} />
-          <Text className="mt-3 text-xs leading-5 text-[#777]">
-            Your exact delivery fee and total are locked in the secure preview
-            before the Order is created.
-          </Text>
-        </Section>
-        <Pressable
-          accessibilityRole="checkbox"
-          accessibilityState={{ checked: acceptedPolicies }}
-          onPress={() => setAcceptedPolicies((value) => !value)}
-          className="mt-4 flex-row items-start gap-3 rounded-2xl bg-white p-4"
-        >
-          <View
-            className={`mt-0.5 h-5 w-5 items-center justify-center rounded-md border ${acceptedPolicies ? "border-black bg-black" : "border-[#aaa]"}`}
-          >
-            {acceptedPolicies ? (
-              <Ionicons name="checkmark" size={14} color="#FFC809" />
-            ) : null}
-          </View>
-          <Text className="flex-1 text-xs leading-5 text-[#666]">
-            I accept the current Hook Terms, Privacy Policy, and Returns Policy
-            for this Order.
-          </Text>
-        </Pressable>
-      </ScrollView>
-      <View
-        className="absolute inset-x-0 bottom-0 border-t border-black/5 bg-white px-4 pt-3"
-        style={{ paddingBottom: insets.bottom + 8 }}
-      >
-        <View className="mb-2 flex-row items-center justify-between">
-          <Text className="text-xs text-[#777]">
-            {paymentMethod === "PREPAID"
-              ? "Secure Paystack payment"
-              : "Operations review may apply"}
-          </Text>
-          <Text className="font-black">
-            ₦{(Number((cart.data as any)?.subtotalMinor || 0) / 100).toLocaleString()}
-          </Text>
         </View>
-        <Pressable
-          disabled={busy}
-          onPress={() => void placeOrder()}
-          className={`h-14 items-center justify-center rounded-2xl ${busy ? "bg-[#e3e3e5]" : "bg-hook"}`}
-        >
-          {busy ? (
-            <HookLoader size="button" />
-          ) : (
-            <Text className="font-black">
-              {!selectedAddress
-                ? "Add delivery address"
-                : paymentMethod === "PREPAID"
-                ? "Continue to secure payment"
-                : "Submit handover request"}
-            </Text>
-          )}
-        </Pressable>
-      </View>
-      <HookSheet
-        visible={addressPromptVisible}
-        onClose={() => setAddressPromptVisible(false)}
-        accessibilityLabel="Delivery address required"
-        maxHeight="70%"
-        title="We need your delivery address first"
-        message="Add a verified Nigerian address so Hook can calculate delivery and continue with Paystack or pay-at-handover checkout."
-      >
-        <View className="gap-3">
-          <Pressable
-            accessibilityRole="button"
-            onPress={openAddresses}
-            className="h-[52px] items-center justify-center rounded-full bg-hook"
-          >
-            <Text className="text-sm font-black text-black">
-              Add delivery address
-            </Text>
-          </Pressable>
-          <Pressable
-            accessibilityRole="button"
-            onPress={() => setAddressPromptVisible(false)}
-            className="h-[52px] items-center justify-center rounded-full bg-hook-surface"
-          >
-            <Text className="text-sm font-bold text-black">Not now</Text>
-          </Pressable>
-        </View>
-      </HookSheet>
-    </View>
-  );
-}
 
-function Section({
-  title,
-  action,
-  onAction,
-  children,
-}: {
-  title: string;
-  action?: string;
-  onAction?: () => void;
-  children: React.ReactNode;
-}) {
-  return (
-    <View className="mt-4 rounded-[22px] bg-white p-4">
-      <View className="mb-3 flex-row items-center justify-between">
-        <Text className="text-base font-black">{title}</Text>
-        {action ? (
-          <Pressable onPress={onAction}>
-            <Text className="text-sm font-bold text-[#9a7300]">{action}</Text>
+        <View style={{ marginTop: 24 }}>
+          <ReviewOrderSection
+            items={cartItems}
+            onEditOrder={() => router.push("/(app)/cart" as never)}
+          />
+        </View>
+
+        <View style={{ marginTop: 24 }}>
+          <OrderTotals
+            itemCount={cartItems.reduce((sum, item) => sum + Number(item.quantity || 0), 0)}
+            subtotalMinor={money.subtotalMinor}
+            creditsAppliedMinor={money.creditsAppliedMinor}
+            couponDiscountMinor={money.couponDiscountMinor}
+            couponCode={coupon?.code}
+            deliveryFeeMinor={money.deliveryFeeMinor}
+            totalMinor={money.totalMinor}
+          />
+        </View>
+
+        <View style={{ marginTop: 28, borderRadius: 18, borderWidth: 1, borderColor: acceptedPolicies ? "#E4B500" : "#E1E1E4", backgroundColor: acceptedPolicies ? "#FFF9E5" : "white", padding: 16 }}>
+          <Pressable
+            accessibilityRole="checkbox"
+            accessibilityState={{ checked: acceptedPolicies }}
+            accessibilityLabel="Accept Hook checkout policies"
+            onPress={() => setAcceptedPolicies((current) => !current)}
+            style={{ minHeight: 44, flexDirection: "row", alignItems: "center", gap: 12 }}
+          >
+            <View style={{ height: 26, width: 26, alignItems: "center", justifyContent: "center", borderRadius: 8, borderWidth: 1.5, borderColor: acceptedPolicies ? "#111" : "#B8B8BD", backgroundColor: acceptedPolicies ? "#FFC809" : "#F7F7F8" }}>
+              {acceptedPolicies ? <Ionicons name="checkmark" size={17} color="#111" /> : null}
+            </View>
+            <View style={{ flex: 1 }}>
+              <Text style={{ fontSize: 14, fontFamily: "NunitoSans-Bold", color: "#111" }}>I agree to Hook&apos;s checkout policies</Text>
+              <Text style={{ marginTop: 2, fontSize: 12, lineHeight: 17, color: "#666" }}>Required before secure payment.</Text>
+            </View>
           </Pressable>
-        ) : null}
-      </View>
-      {children}
-    </View>
-  );
-}
-function PaymentChoice({
-  active,
-  title,
-  description,
-  disabled,
-  onPress,
-}: {
-  active: boolean;
-  title: string;
-  description: string;
-  disabled?: boolean;
-  onPress: () => void;
-}) {
-  return (
-    <Pressable
-      disabled={disabled}
-      onPress={onPress}
-      className={`flex-row items-center gap-3 rounded-2xl border p-4 ${active ? "border-hook bg-[#fff9df]" : "border-black/5 bg-[#fafafa]"} ${disabled ? "opacity-40" : ""}`}
-    >
-      <View
-        className={`h-5 w-5 items-center justify-center rounded-full border ${active ? "border-black bg-black" : "border-[#aaa]"}`}
-      >
-        {active ? <View className="h-2 w-2 rounded-full bg-hook" /> : null}
-      </View>
-      <View className="flex-1">
-        <Text className="font-black">{title}</Text>
-        <Text className="mt-1 text-xs leading-4 text-[#777]">
-          {description}
-        </Text>
-      </View>
-    </Pressable>
-  );
-}
-function Row({ label, value }: { label: string; value: number }) {
-  return (
-    <View className="flex-row justify-between">
-      <Text className="text-sm text-[#666]">{label}</Text>
-      <Text className="font-black">
-        ₦{(Number(value || 0) / 100).toLocaleString()}
-      </Text>
+          <View style={{ marginTop: 10, flexDirection: "row", flexWrap: "wrap", alignItems: "center", gap: 5, borderTopWidth: 1, borderTopColor: "rgba(17,17,17,0.08)", paddingTop: 12 }}>
+            <Text style={{ fontSize: 12, lineHeight: 20, color: "#666" }}>Read</Text>
+            <Text accessibilityRole="link" onPress={() => openPolicy("terms")} style={{ fontSize: 12, lineHeight: 20, fontFamily: "NunitoSans-Bold", color: "#6F5900", textDecorationLine: "underline" }}>Terms</Text>
+            <Text style={{ fontSize: 12, color: "#888" }}>·</Text>
+            <Text accessibilityRole="link" onPress={() => openPolicy("privacy")} style={{ fontSize: 12, lineHeight: 20, fontFamily: "NunitoSans-Bold", color: "#6F5900", textDecorationLine: "underline" }}>Privacy</Text>
+            <Text style={{ fontSize: 12, color: "#888" }}>·</Text>
+            <Text accessibilityRole="link" onPress={() => openPolicy("returns")} style={{ fontSize: 12, lineHeight: 20, fontFamily: "NunitoSans-Bold", color: "#6F5900", textDecorationLine: "underline" }}>Returns Policy</Text>
+          </View>
+          {readyForPayment && !acceptedPolicies ? (
+            <View style={{ marginTop: 10, flexDirection: "row", alignItems: "center", gap: 7 }}>
+              <Ionicons name="information-circle-outline" size={15} color="#8A6500" />
+              <Text style={{ flex: 1, fontSize: 11, lineHeight: 16, color: "#8A6500" }}>Check the box above to enable payment.</Text>
+            </View>
+          ) : null}
+        </View>
+      </ScrollView>
+
+      <BottomActionBar>
+        <BottomActionButton
+          label={
+            !selectedAddress
+              ? "Choose address"
+              : !provider
+                ? "Choose logistics"
+                : !paymentChosen
+                  ? "Choose payment method"
+                  : !acceptedPolicies
+                    ? "Accept policies to pay"
+                    : "Pay now"
+          }
+          disabled={busy || (readyForPayment && !acceptedPolicies)}
+          loading={busy}
+          onPress={() => void placeOrder()}
+          flex={1}
+        />
+      </BottomActionBar>
+
+      <DeliveryAddressSheet
+        visible={sheet === "address"}
+        addresses={addressRows}
+        selectedId={selectedAddress?.publicId}
+        note={deliveryNote}
+        onSelect={(id) => {
+          setAddressId(id);
+          setSheet(null);
+        }}
+        onNoteChange={setDeliveryNote}
+        onAddAddress={() => {
+          setSheet(null);
+          router.push("/addresses" as never);
+        }}
+        onClose={() => setSheet(null)}
+      />
+
+      <LogisticsSheet
+        visible={sheet === "logistics"}
+        providers={providers}
+        loading={logistics.isFetching}
+        error={logistics.isError}
+        onRetry={() => void logistics.refetch()}
+        selectedId={provider?.publicId || provider?.id}
+        onSelect={(next) => {
+          setProvider(next);
+          // A free-delivery coupon is priced against the courier's fee, so it
+          // has to be re-checked when that fee changes.
+          if (coupon?.appliesToDelivery) setCoupon(undefined);
+          setSheet(null);
+        }}
+        onClose={() => setSheet(null)}
+      />
+
+      <PaymentMethodSheet
+        visible={sheet === "payment"}
+        creditBalanceMinor={credits.data?.balanceMinor ?? 0}
+        useCredits={useCredits}
+        creditsAppliedMinor={money.creditsAppliedMinor}
+        estimatedEarnMinor={estimatedEarnMinor}
+        payNowTotalMinor={money.totalMinor}
+        podTotalMinor={money.payableBeforeCredits}
+        podPaused={podPaused}
+        onToggleCredits={handleToggleCredits}
+        onChoosePayNow={() => { setPaymentChosen(true); setSheet(null); }}
+        onClose={() => setSheet(null)}
+      />
     </View>
   );
 }

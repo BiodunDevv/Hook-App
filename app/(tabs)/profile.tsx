@@ -1,7 +1,8 @@
 import Constants from "expo-constants";
+import { centeredHeaderTextStyle } from "@/constants/design-tokens";
 import { Ionicons } from "@expo/vector-icons";
 import { router, useFocusEffect } from "expo-router";
-import { useCallback, useState } from "react";
+import { useCallback, useRef, useState } from "react";
 import { Pressable, RefreshControl, Text, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import Animated, {
@@ -17,9 +18,21 @@ import { ProfileAvatar, ProfileRow, ProfileSection } from "@/components/profile/
 import { HookConfirmSheet } from "@/components/shared/HookConfirmSheet";
 import { toast } from "@/components/shared/toast";
 import { logout, useLocalSessionQuery } from "@/lib/auth-api";
+import { useCreditsQuery } from "@/lib/mobile-api";
 import { unregisterPushToken } from "@/lib/push";
 import { clearSession } from "@/lib/session";
 import { getHookTabBarContentInset } from "@/components/tab-bar/layout";
+
+const SIGNED_OUT_BENEFITS: {
+  icon: React.ComponentProps<typeof Ionicons>["name"];
+  title: string;
+  description: string;
+}[] = [
+  { icon: "cube-outline", title: "Track every order", description: "Follow each order from Market pickup to your door." },
+  { icon: "location-outline", title: "Saved addresses", description: "Check out faster with your delivery details ready." },
+  { icon: "heart-outline", title: "Products you love", description: "Keep the pieces you are still thinking about." },
+  { icon: "pricetags-outline", title: "Negotiate prices", description: "Agree a better price directly with Hook Markets." },
+];
 
 export default function ProfileScreen() {
   const insets = useSafeAreaInsets();
@@ -31,10 +44,28 @@ export default function ProfileScreen() {
   const [logoutBusy, setLogoutBusy] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
   const session = local.data?.session;
+  const credits = useCreditsQuery(Boolean(session));
+  const creditsLabel = credits.data
+    ? `₦${Math.round(Number(credits.data.balanceMinor || 0) / 100).toLocaleString("en-NG")}`
+    : undefined;
 
   useFocusEffect(useCallback(() => {
     void refetch();
   }, [refetch]));
+
+  // Opening Profile signed out should go straight to sign-in rather than
+  // making the user tap through the placeholder. The ref keeps it to one
+  // prompt per visit, so dismissing the sheet doesn't immediately reopen it.
+  const promptedThisVisit = useRef(false);
+  useFocusEffect(useCallback(() => {
+    if (!local.isFetching && !session && !promptedThisVisit.current) {
+      promptedThisVisit.current = true;
+      openAuth("/(tabs)/profile");
+    }
+    return () => {
+      promptedThisVisit.current = false;
+    };
+  }, [local.isFetching, session, openAuth]));
 
   const onScroll = useAnimatedScrollHandler({
     onScroll: (event) => {
@@ -48,19 +79,52 @@ export default function ProfileScreen() {
 
   if (!session) {
     return (
-      <View
-        className="flex-1 items-center justify-center bg-[#F5F5F5] px-6"
-        style={{ paddingBottom: getHookTabBarContentInset(insets.bottom) }}
-      >
-        <View className="w-full items-center rounded-[18px] bg-white px-6 py-8">
-          <View className="h-20 w-20 items-center justify-center rounded-full bg-hook">
-            <Ionicons name="person" size={34} color="#111" />
+      <View className="flex-1 bg-[#F4F4F5]" style={{ paddingTop: insets.top }}>
+        <View className="flex-row items-center justify-between px-4 py-3">
+          <View className="h-11 w-11" />
+          <Text style={centeredHeaderTextStyle}>Profile</Text>
+          <View className="h-11 w-11" />
+        </View>
+
+        <View className="mx-4 mt-3 overflow-hidden rounded-[24px] bg-[#171717] p-5">
+          <View className="h-11 w-11 items-center justify-center rounded-[13px] bg-white/10">
+            <Ionicons name="person" size={22} color="#FFC809" />
           </View>
-          <Text className="mt-5 text-center text-[24px] font-black text-black">Your Hook profile</Text>
-          <Text className="mt-2 text-center text-[14px] leading-5 text-[#77777B]">Sign in to manage your orders, addresses, saved products and security.</Text>
-          <Pressable accessibilityRole="button" onPress={() => openAuth("/(tabs)/profile")} className="mt-6 h-[52px] w-full items-center justify-center rounded-full bg-hook">
+          <Text className="mt-5 text-[22px] font-black text-white">Your Hook account</Text>
+          <Text className="mt-2 text-[13px] leading-5 text-white/60">
+            Sign in to track orders, save delivery addresses, keep the products you love and negotiate prices with Hook Markets.
+          </Text>
+        </View>
+
+        <View
+          className="mx-4 mt-4 rounded-[24px] bg-white p-5"
+          style={{ marginBottom: getHookTabBarContentInset(insets.bottom) }}
+        >
+          {SIGNED_OUT_BENEFITS.map((benefit, index) => (
+            <View
+              key={benefit.title}
+              className={`flex-row items-center gap-3 ${index ? "mt-4 border-t border-[#F0F0F1] pt-4" : ""}`}
+            >
+              <View className="h-10 w-10 items-center justify-center rounded-[13px] bg-[#F4F4F5]">
+                <Ionicons name={benefit.icon} size={19} color="#111" />
+              </View>
+              <View className="flex-1">
+                <Text className="text-[15px] font-black text-black">{benefit.title}</Text>
+                <Text className="mt-0.5 text-[12px] leading-4 text-[#77777B]">{benefit.description}</Text>
+              </View>
+            </View>
+          ))}
+
+          <Pressable
+            accessibilityRole="button"
+            onPress={() => openAuth("/(tabs)/profile")}
+            className="mt-6 h-[52px] items-center justify-center rounded-full bg-hook active:opacity-90"
+          >
             <Text className="font-black text-black">Sign in or create account</Text>
           </Pressable>
+          <Text className="mt-3 text-center text-[11px] leading-4 text-[#A0A0A3]">
+            It only takes a moment, and your cart stays exactly as you left it.
+          </Text>
         </View>
       </View>
     );
@@ -122,6 +186,16 @@ export default function ProfileScreen() {
             <ProfileRow icon="chatbox" label="Messages" onPress={() => router.push("/(tabs)/messages" as never)} />
           </ProfileSection>
 
+          <ProfileSection title="Rewards">
+            <ProfileRow
+              icon="wallet"
+              label="Hook Coin"
+              value={creditsLabel}
+              onPress={() => router.push("/credits" as never)}
+            />
+            <ProfileRow icon="gift" label="Refer a friend" onPress={() => router.push("/referrals" as never)} />
+          </ProfileSection>
+
           <ProfileSection title="Security">
             <ProfileRow icon="lock-closed" label="Password & biometrics" onPress={() => router.push("/profile/security" as never)} />
             <ProfileRow icon="phone-portrait" label="Your devices" onPress={() => router.push("/profile/devices" as never)} />
@@ -130,7 +204,10 @@ export default function ProfileScreen() {
 
           <ProfileSection title="Support and legal">
             <ProfileRow icon="call" label="Help & support" onPress={() => toast.info("Hook support", "Support options are coming soon.")} neutral />
-            <ProfileRow icon="document-text" label="Terms & privacy" onPress={() => toast.info("Terms & privacy", "Legal information will open here.")} neutral />
+            <ProfileRow icon="document-text" label="Terms of Service" onPress={() => router.push("/legal/terms" as never)} neutral />
+            <ProfileRow icon="shield-checkmark" label="Privacy Policy" onPress={() => router.push("/legal/privacy" as never)} neutral />
+            <ProfileRow icon="refresh-circle" label="Returns Policy" onPress={() => router.push("/legal/returns" as never)} neutral />
+            <ProfileRow icon="trash" label="Delete account" onPress={() => router.push("/profile/delete-account" as never)} danger />
           </ProfileSection>
 
           <ProfileSection title="App information">

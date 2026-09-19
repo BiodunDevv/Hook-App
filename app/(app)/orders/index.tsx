@@ -1,4 +1,5 @@
 import { Ionicons } from "@expo/vector-icons";
+import { centeredHeaderTextStyle, screenPadding } from "@/constants/design-tokens";
 import { router } from "expo-router";
 import { FlatList, Pressable, RefreshControl, Text, View } from "react-native";
 import { useState } from "react";
@@ -8,6 +9,8 @@ import { HookBackButton } from "@/components/shared/HookBackButton";
 import { useCustomerSessionQuery, useOrdersQuery } from "@/lib/mobile-api";
 import { isCustomerSession } from "@/lib/session";
 import { useAuthSheet } from "@/components/auth/AuthSheetProvider";
+import { Button } from "@/components/ui/button";
+import { OrderCard } from "@/components/orders/OrderCard";
 export default function OrdersScreen() {
   const insets = useSafeAreaInsets();
   const query = useOrdersQuery();
@@ -30,17 +33,17 @@ export default function OrdersScreen() {
       <View className="h-20 w-20 items-center justify-center rounded-full bg-[#fff4c7]"><Ionicons name="cube-outline" size={36} /></View>
       <Text className="mt-5 text-xl font-black">Sign in to track orders</Text>
       <Text className="mt-2 text-center text-sm leading-5 text-[#777]">Your local cart stays ready while you sign in or create an account.</Text>
-      <Pressable onPress={() => openAuth("/orders" as never)} className="mt-6 h-[52px] w-full items-center justify-center rounded-full bg-hook"><Text className="font-bold text-black">Continue</Text></Pressable>
+      <Button title="Continue" onPress={() => openAuth("/orders" as never)} className="mt-6 w-full" />
     </View>
   );
   if (query.isLoading || session.isPending)
     return <HookPageLoading title="My orders" label="Loading your orders" />;
   return (
     <View className="flex-1 bg-[#f4f4f5]" style={{ paddingTop: insets.top }}>
-      <View className="px-4 pb-4 pt-3">
+      <View className="pb-4 pt-3" style={{ paddingHorizontal: screenPadding }}>
         <View className="flex-row items-center justify-between">
           <HookBackButton />
-          <Text className="text-[22px] font-black">Orders</Text>
+          <Text style={centeredHeaderTextStyle}>Orders</Text>
           <View className="h-11 w-11" />
         </View>
         <Text className="mt-4 text-sm text-[#777]">Payments, approval and delivery readiness</Text>
@@ -56,47 +59,21 @@ export default function OrdersScreen() {
           />
         }
         contentContainerStyle={{
-          padding: 16,
+          paddingHorizontal: screenPadding,
+          paddingVertical: screenPadding,
           gap: 12,
           paddingBottom: insets.bottom + 110,
         }}
         renderItem={({ item }) => (
-          <Pressable
+          <OrderCard
+            order={item}
             onPress={() =>
               router.push({
                 pathname: "/orders/[id]",
                 params: { id: item.id },
               } as never)
             }
-            className="rounded-[22px] bg-white p-4"
-          >
-            <View className="flex-row items-center justify-between">
-              <Text className="font-black">{item.displayNumber || item.id}</Text>
-              <View className="rounded-full bg-hook/20 px-3 py-1.5">
-                <Text className="text-[10px] font-bold uppercase">
-                  {item.statusLabel || String(item.status || "").replaceAll("_", " ")}
-                </Text>
-              </View>
-            </View>
-            <View className="mt-4 flex-row items-end justify-between">
-              <View>
-                <Text className="text-xs text-[#888]">
-                  {item.itemCount || 0} item{item.itemCount === 1 ? "" : "s"}
-                </Text>
-                <Text className="mt-1 text-xs text-[#888]">
-                  {item.paymentMethod === "PAY_AT_HANDOVER"
-                    ? "Pay at handover"
-                    : "Prepaid"}
-                </Text>
-              </View>
-              <Text className="text-xl font-black">
-                ₦
-                {(
-                  Number(item.totalMinor || item.total * 100 || 0) / 100
-                ).toLocaleString()}
-              </Text>
-            </View>
-          </Pressable>
+          />
         )}
         ListEmptyComponent={
           <View className="overflow-hidden rounded-[24px] bg-white">
@@ -117,9 +94,7 @@ export default function OrdersScreen() {
               <Text className="mt-2 text-center text-sm leading-5 text-[#777]">
                 Explore products from Hook Markets and your first order will appear here.
               </Text>
-              <Pressable onPress={() => router.push("/(tabs)/discover" as never)} className="mt-6 h-12 items-center justify-center rounded-full bg-hook px-6">
-                <Text className="font-black text-black">Start discovering</Text>
-              </Pressable>
+              <Button title="Start discovering" onPress={() => router.push("/(tabs)/discover" as never)} className="mt-6" />
             </View>
           </View>
         }

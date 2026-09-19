@@ -18,6 +18,7 @@ export type AnonymousCartItem = {
     currency: string;
     sourceStateId?: string;
     marketId?: string;
+    marketName?: string;
   };
   updatedAt: string;
 };
@@ -96,6 +97,7 @@ export function addAnonymousCartItem(input: {
           currency: input.product.currency,
           sourceStateId: input.product.sourceState?.publicId,
           marketId: input.product.market?.publicId,
+          marketName: input.product.market?.name,
         },
         updatedAt: new Date().toISOString(),
       }],
@@ -158,6 +160,7 @@ export function anonymousCartResponse(value: AnonymousCommerce, products: Public
       return {
         checkoutEligible,
         blockingReasons: checkoutEligible ? [] : ["RUNNER_CONFIRMATION_REQUIRED"],
+        market: product?.market || (item.productSnapshot.marketName ? { publicId: item.productSnapshot.marketId, name: item.productSnapshot.marketName } : undefined),
         product: product
           ? { ...product, id: product.publicId, imageUrl: product.media?.[0]?.url }
           : { id: item.productId, title: item.productSnapshot.title, imageUrl: item.productSnapshot.imageUrl },

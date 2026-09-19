@@ -100,7 +100,7 @@ export function CatalogProductCard({
   return (
     <Pressable
       onPress={openProduct}
-      className="flex-1"
+      className="w-full"
     >
       <View
         className={`relative aspect-square overflow-hidden bg-[#FAFAFA] ${

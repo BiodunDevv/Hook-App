@@ -6,11 +6,12 @@ import { Pressable, Text, TextInput, View } from 'react-native';
 import { AuthPrimaryButton, AuthScreenShell } from '@/components/auth/auth-screen-shell';
 import { useAuthSheet } from '@/components/auth/AuthSheetProvider';
 import { toast } from '@/components/shared/toast';
+import { promptScheduledDeletion, restoreDeletedAccount, scheduledDeletionDate } from '@/lib/account-deletion-api';
 import { useLoginMutation } from '@/lib/auth-api';
 import { registerPushToken } from '@/lib/push';
 import { saveSession } from '@/lib/session';
 
-const MIN_LENGTH = 9;
+import { PASSWORD_MIN_LENGTH as MIN_LENGTH } from '@/lib/password-policy';
 
 export function PasswordLogin() {
   const { email = '' } = useLocalSearchParams<{ email?: string }>();
@@ -36,6 +37,22 @@ export function PasswordLogin() {
       toast.success('Welcome back', 'You are signed in');
       if (!shouldResume) router.replace('/(tabs)');
     } catch (error) {
+      const deletionDate = scheduledDeletionDate(error);
+      if (deletionDate) {
+        // The password was correct, but the customer asked to delete this account.
+        promptScheduledDeletion(deletionDate, {
+          onRestore: async () => {
+            try {
+              await restoreDeletedAccount({ email, password });
+              toast.success('Account restored', 'Signing you in.');
+              await handleContinue();
+            } catch (restoreError) {
+              toast.error('Could not restore your account', restoreError instanceof Error ? restoreError.message : 'Please try again.');
+            }
+          },
+        });
+        return;
+      }
       toast.error('Could not sign in', error instanceof Error ? error.message : 'Please check your password.');
     }
   }
@@ -45,6 +62,15 @@ export function PasswordLogin() {
       title="Password"
       description="Login your password">
       <View className="gap-2.5">
+        <View className="flex-row items-center justify-between px-1">
+          <Text className="text-[13px] font-bold text-[#46464A]">Password</Text>
+          <Pressable
+            accessibilityRole="button"
+            hitSlop={8}
+            onPress={() => router.push({ pathname: '/auth/forgot-password', params: { email } })}>
+            <Text className="text-[13px] font-bold text-[#9A7600]">Forgot password?</Text>
+          </Pressable>
+        </View>
         <View
           className={`h-[50px] flex-row items-center rounded-full border-[1.3px] bg-white px-4 ${
             hasError ? 'border-[#ef4444]' : 'border-[#90a1b9]'
@@ -77,14 +103,7 @@ export function PasswordLogin() {
           Must contain at least {MIN_LENGTH} characters
         </Text>
 
-        <Pressable
-          accessibilityRole="button"
-          className="self-center py-3"
-          onPress={() => router.push({ pathname: '/auth/forgot-password', params: { email } })}>
-          <Text className="text-sm font-medium text-black">Forgot password?</Text>
-        </Pressable>
-
-        <View className="pt-1">
+        <View className="pt-3">
           <AuthPrimaryButton disabled={!isValid || loading} loading={loading} label="continue" onPress={handleContinue} />
         </View>
       </View>

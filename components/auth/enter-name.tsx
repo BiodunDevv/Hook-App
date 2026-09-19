@@ -29,6 +29,7 @@ import {
 export function EnterName({ email }: { email: string }) {
   const insets = useSafeAreaInsets();
   const [name, setName] = useState("");
+  const [referralCode, setReferralCode] = useState("");
   const completeSignup = useCompleteSignupMutation();
   const { hasPendingIntent } = useAuthSheet();
   const scrollRef = useRef<ScrollView>(null);
@@ -59,6 +60,8 @@ export function EnterName({ email }: { email: string }) {
         signupSessionToken: pending.signupSessionToken,
         firstName,
         lastName: rest.join(" ") || firstName,
+        // compactBody() drops this when blank, so it stays truly optional.
+        referralCode: referralCode.trim() || undefined,
       });
       await saveSession(session);
       await clearPendingSignup();
@@ -148,6 +151,34 @@ export function EnterName({ email }: { email: string }) {
                 onSubmitEditing={handleContinue}
                 returnKeyType="done"
               />
+            </View>
+
+            <View style={{ marginTop: 14 }}>
+              <TextInput
+                autoCapitalize="characters"
+                autoCorrect={false}
+                placeholder="Referral code (optional)"
+                placeholderTextColor="rgba(0,0,0,0.35)"
+                style={{
+                  backgroundColor: "#fff",
+                  borderColor: "#90a1b9",
+                  borderRadius: 6.6,
+                  borderWidth: 1.3,
+                  color: "#000",
+                  fontSize: 14,
+                  height: 50,
+                  letterSpacing: 1,
+                  paddingHorizontal: 16,
+                }}
+                value={referralCode}
+                onChangeText={(value) => setReferralCode(value.toUpperCase())}
+                onFocus={handleFocus}
+                onSubmitEditing={handleContinue}
+                returnKeyType="done"
+              />
+              <Text style={{ color: "#414040", fontSize: 12, marginTop: 6 }}>
+                Joined through a friend? Enter their code to get ₦300 in Hook Coin.
+              </Text>
             </View>
 
             <View style={{ marginTop: 18 }}>

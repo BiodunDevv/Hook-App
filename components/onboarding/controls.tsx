@@ -12,6 +12,7 @@ export function SkipButton({
     <Button
       accessibilityLabel="Skip onboarding"
       accessibilityRole="button"
+      hitSlop={10}
       className="h-9 min-w-16"
       size="auto"
       style={{
@@ -39,6 +40,7 @@ export function BackButton({
     <Button
       accessibilityLabel="Go back"
       accessibilityRole="button"
+      hitSlop={10}
       className="h-9 w-9"
       size="auto"
       style={{
@@ -90,10 +92,10 @@ export function NextButton({
     <Button
       accessibilityLabel={isLast ? "Get started" : "Next onboarding screen"}
       accessibilityRole="button"
-      className="h-14 w-full flex-row rounded-full bg-[#111111] px-0"
+      className="h-14 w-full flex-row rounded-full bg-[#111111] px-0 active:opacity-90"
+      hitSlop={8}
       style={{
         backgroundColor: "#111111",
-        elevation: 6,
         shadowColor: "#000",
         shadowOffset: { width: 0, height: 5 },
         shadowOpacity: 0.2,

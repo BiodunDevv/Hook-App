@@ -1,6 +1,6 @@
-import { Pressable, Text, View } from "react-native";
+import { View } from "react-native";
 
-import { HookLoader } from "./HookLoader";
+import { Button } from "@/components/ui/button";
 import { HookSheet } from "./HookSheet";
 
 type HookConfirmSheetProps = {
@@ -37,29 +37,8 @@ export function HookConfirmSheet({
       message={message}
     >
       <View className="flex-row gap-3">
-        <Pressable
-          accessibilityRole="button"
-          disabled={busy}
-          onPress={onClose}
-          className="h-[52px] flex-1 items-center justify-center rounded-2xl bg-white"
-        >
-          <Text className="font-bold text-[#111]">{cancelLabel}</Text>
-        </Pressable>
-        <Pressable
-          accessibilityRole="button"
-          disabled={busy}
-          onPress={() => void onConfirm()}
-          className={`h-[52px] flex-1 items-center justify-center rounded-2xl ${destructive ? "bg-[#D94A43]" : "bg-hook"}`}
-          style={{ opacity: busy ? 0.7 : 1 }}
-        >
-          {busy ? (
-            <HookLoader size="button" variant={destructive ? "yellow" : "dark"} />
-          ) : (
-            <Text className={`font-black ${destructive ? "text-white" : "text-black"}`}>
-              {confirmLabel}
-            </Text>
-          )}
-        </Pressable>
+        <Button title={cancelLabel} variant="secondary" disabled={busy} onPress={onClose} className="flex-1" />
+        <Button title={confirmLabel} variant={destructive ? "danger" : "primary"} loading={busy} onPress={() => void onConfirm()} className="flex-1" />
       </View>
     </HookSheet>
   );

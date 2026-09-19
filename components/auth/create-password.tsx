@@ -21,7 +21,7 @@ import { toast } from "@/components/shared/toast";
 import { useStartSignupMutation } from "@/lib/auth-api";
 import { savePendingSignup } from "@/lib/session";
 
-const MIN_LENGTH = 9;
+import { PASSWORD_MIN_LENGTH as MIN_LENGTH } from '@/lib/password-policy';
 const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
 export function CreatePassword({ email }: { email: string }) {

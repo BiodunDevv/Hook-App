@@ -1,7 +1,7 @@
 import { Ionicons } from '@expo/vector-icons';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useState } from 'react';
-import { Pressable, ScrollView, Text, View } from 'react-native';
+import { Pressable, RefreshControl, ScrollView, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { HookConfirmSheet } from '@/components/shared/HookConfirmSheet';
@@ -9,13 +9,24 @@ import { HookLoader } from '@/components/shared/HookLoader';
 import { HookBackButton } from '@/components/shared/HookBackButton';
 import { toast } from '@/components/shared/toast';
 import { type AccountDevice, listDevices, revokeDevice, revokeOtherDevices } from '@/lib/auth-api';
+import { screenPadding } from "@/constants/design-tokens";
 
 export default function DevicesScreen() {
   const insets = useSafeAreaInsets();
   const client = useQueryClient();
   const [selectedDevice, setSelectedDevice] = useState<AccountDevice | null>(null);
   const [allOthersOpen, setAllOthersOpen] = useState(false);
+  const [refreshing, setRefreshing] = useState(false);
   const query = useQuery({ queryKey: ['account', 'devices'], queryFn: listDevices });
+
+  async function refreshDevices() {
+    setRefreshing(true);
+    try {
+      await query.refetch();
+    } finally {
+      setRefreshing(false);
+    }
+  }
   const revoke = useMutation({
     mutationFn: revokeDevice,
     onSuccess: async () => {
@@ -38,7 +49,11 @@ export default function DevicesScreen() {
 
   return (
     <View className="flex-1 bg-[#F5F5F5]">
-      <ScrollView contentContainerStyle={{ paddingTop: insets.top + 12, paddingHorizontal: 18, paddingBottom: insets.bottom + 40 }} showsVerticalScrollIndicator={false}>
+      <ScrollView
+        contentContainerStyle={{ paddingTop: insets.top + 12, paddingHorizontal: screenPadding, paddingBottom: insets.bottom + 40 }}
+        showsVerticalScrollIndicator={false}
+        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => void refreshDevices()} tintColor="#111111" />}
+      >
         <View className="flex-row items-center">
           <HookBackButton />
           <View className="ml-4 flex-1"><Text className="text-xl font-black">Your devices</Text><Text className="mt-0.5 text-xs text-[#777]">Manage where your Hook account is signed in.</Text></View>

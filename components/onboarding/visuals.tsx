@@ -158,7 +158,6 @@ function MessageBubble({
       style={{
         backgroundColor: "#fff",
         borderRadius: 18 * scale,
-        elevation: 3,
         left: x * scale,
         paddingHorizontal: 12 * scale,
         paddingVertical: 8 * scale,

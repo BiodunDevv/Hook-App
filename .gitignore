@@ -42,3 +42,13 @@ app-example
 # generated native folders
 /ios
 /android
+
+
+!/ios/
+/ios/*
+!/ios/hook/
+/ios/hook/*
+!/ios/hook/AppDelegate.swift
+!/ios/hook/Info.plist
+# Local APK artifacts
+/build/

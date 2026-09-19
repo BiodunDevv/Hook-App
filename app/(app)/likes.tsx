@@ -1,4 +1,5 @@
 import { Ionicons } from "@expo/vector-icons";
+import { centeredHeaderTextStyle } from "@/constants/design-tokens";
 import { router } from "expo-router";
 import { FlatList, Pressable, Text, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
@@ -51,7 +52,7 @@ export default function LikesScreen() {
     <View className="flex-1 bg-[#F1F1F3]" style={{ paddingTop: insets.top }}>
       <View className="flex-row items-center justify-between px-4 py-3">
         <HookBackButton />
-        <Text className="text-xl font-black text-black">Your likes</Text>
+        <Text style={centeredHeaderTextStyle}>Your likes</Text>
         <View className="w-11" />
       </View>
       <FlatList

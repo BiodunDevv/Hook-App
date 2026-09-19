@@ -25,9 +25,10 @@ export default function OnboardingScreen() {
   const compact = height < 700;
   const horizontalPadding = Math.max(16, Math.min(24, width * 0.05));
   const contentHeight = compact ? 210 : 230;
+  const [visualAreaHeight, setVisualAreaHeight] = useState(0);
   const availableVisualHeight = Math.max(
-    280,
-    height - insets.top - insets.bottom - contentHeight,
+    240,
+    visualAreaHeight || height - insets.bottom - contentHeight,
   );
   const scale = Math.min(width / DESIGN_WIDTH, availableVisualHeight / 590, 1.08);
   const visualWidth = DESIGN_WIDTH * scale;
@@ -50,10 +51,17 @@ export default function OnboardingScreen() {
   return (
     <View
       className="flex-1 overflow-hidden bg-hook-surface"
-      style={{ paddingBottom: Math.max(insets.bottom, 12), paddingTop: insets.top }}
+      style={{ paddingBottom: Math.max(insets.bottom, 12) }}
     >
       <AuthGlowBackground />
-      <View className="flex-1 items-center justify-end overflow-hidden">
+      {/* Purely decorative, and its absolutely-positioned pieces can overflow
+          this container — without pointerEvents="none" they sit over the
+          Next button and swallow taps. */}
+      <View
+        className="min-h-0 flex-1 items-center justify-end overflow-hidden"
+        pointerEvents="none"
+        onLayout={(event) => setVisualAreaHeight(event.nativeEvent.layout.height)}
+      >
         <View style={{ height: visualHeight, width: visualWidth }}>
           <OnboardingVisual activeIndex={activeIndex} scale={scale} />
         </View>
@@ -72,9 +80,10 @@ export default function OnboardingScreen() {
       </View>
 
       <View
-        className="shrink-0"
+        className="z-10 shrink-0"
         style={{
           height: contentHeight,
+          minHeight: contentHeight,
           paddingHorizontal: horizontalPadding,
           paddingTop: compact ? 4 : 10,
         }}
