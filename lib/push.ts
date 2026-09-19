@@ -1,3 +1,4 @@
+import Constants from 'expo-constants';
 import * as Device from 'expo-device';
 import { Platform } from 'react-native';
 
@@ -32,11 +33,33 @@ function getNotifications(): NotificationsModule | null {
   return notificationsModule;
 }
 
+/**
+ * Android 8+ shows notifications only through a channel, and Android 13+ will
+ * not even ask for permission until one exists. The backend sends to the
+ * channel named 'default'. Safe to call repeatedly.
+ */
+async function ensureAndroidChannel(Notifications: NotificationsModule) {
+  if (Platform.OS !== 'android') return;
+  await Notifications.setNotificationChannelAsync('default', {
+    name: 'Hook',
+    importance: Notifications.AndroidImportance.MAX,
+    vibrationPattern: [0, 250, 250, 250],
+    lightColor: '#FFC809',
+  });
+}
+
+/** The EAS project the token belongs to. Explicit, so it never depends on config being inlined. */
+function easProjectId() {
+  return (Constants.expoConfig?.extra as { eas?: { projectId?: string } } | undefined)?.eas?.projectId
+    ?? (Constants as { easConfig?: { projectId?: string } }).easConfig?.projectId;
+}
+
 export async function registerPushToken(options: { sendWelcome?: boolean } = {}) {
   try {
     if (!Device.isDevice) return null;
     const Notifications = getNotifications();
     if (!Notifications) return null;
+    await ensureAndroidChannel(Notifications);
     const permission = await Notifications.getPermissionsAsync();
     let status = permission.status;
     if (status !== 'granted') {
@@ -45,7 +68,8 @@ export async function registerPushToken(options: { sendWelcome?: boolean } = {})
     }
     if (status !== 'granted') return null;
 
-    const token = await Notifications.getExpoPushTokenAsync();
+    const projectId = easProjectId();
+    const token = await Notifications.getExpoPushTokenAsync(projectId ? { projectId } : undefined);
     const session = await getSession();
     if (!session?.accessToken) return null;
 
@@ -60,7 +84,10 @@ export async function registerPushToken(options: { sendWelcome?: boolean } = {})
       }),
     });
     return token.data;
-  } catch {
+  } catch (error) {
+    // Silent for users, but the usual cause on Android (a build without
+    // google-services.json) is impossible to find without this line.
+    if (__DEV__) console.warn('[push] Could not register for push notifications:', error instanceof Error ? error.message : error);
     return null;
   }
 }
