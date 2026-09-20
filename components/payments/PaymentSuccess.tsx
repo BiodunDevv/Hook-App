@@ -99,7 +99,7 @@ export function PaymentSuccess({
             <Image source={hookCoin} style={{ width: 38, height: 38 }} resizeMode="contain" />
             <View style={{ flex: 1 }}>
               <Text style={{ fontSize: 15, fontFamily: "NunitoSans-Black", color: "#111111" }}>
-                You earned {naira(earned)} Hook Coin
+                You earned {naira(earned)} Hook credit
               </Text>
               <Text style={{ marginTop: 2, fontSize: 13, color: "#6B5A18" }}>Spend it on your next order.</Text>
             </View>

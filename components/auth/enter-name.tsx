@@ -19,11 +19,11 @@ import { AuthGlowBackground } from "@/components/shared/glow-background";
 import { HookLoader } from "@/components/shared/HookLoader";
 import { toast } from "@/components/shared/toast";
 import { useCompleteSignupMutation } from "@/lib/auth-api";
-import { registerPushToken } from "@/lib/push";
+import { useCreditConfigQuery } from "@/lib/mobile-api";
+import { completeSignIn } from "@/lib/post-sign-in";
 import {
   clearPendingSignup,
   getPendingSignup,
-  saveSession,
 } from "@/lib/session";
 
 export function EnterName({ email }: { email: string }) {
@@ -31,6 +31,7 @@ export function EnterName({ email }: { email: string }) {
   const [name, setName] = useState("");
   const [referralCode, setReferralCode] = useState("");
   const completeSignup = useCompleteSignupMutation();
+  const creditConfig = useCreditConfigQuery().data;
   const { hasPendingIntent } = useAuthSheet();
   const scrollRef = useRef<ScrollView>(null);
   const inputRef = useRef<TextInput>(null);
@@ -63,9 +64,8 @@ export function EnterName({ email }: { email: string }) {
         // compactBody() drops this when blank, so it stays truly optional.
         referralCode: referralCode.trim() || undefined,
       });
-      await saveSession(session);
       await clearPendingSignup();
-      await registerPushToken({ sendWelcome: true });
+      await completeSignIn(session);
       if (!shouldResume) router.replace("/auth/congratulations");
     } catch (error) {
       toast.error(
@@ -177,7 +177,7 @@ export function EnterName({ email }: { email: string }) {
                 returnKeyType="done"
               />
               <Text style={{ color: "#414040", fontSize: 12, marginTop: 6 }}>
-                Joined through a friend? Enter their code to get ₦300 in Hook Coin.
+                Joined through a friend? Enter their code to get ₦{((creditConfig?.referralSignupBonusMinor ?? 30000) / 100).toLocaleString("en-NG")} in Hook credit.
               </Text>
             </View>
 

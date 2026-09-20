@@ -13,9 +13,14 @@ import { getDeviceId, getSession } from '@/lib/session';
  * usable; a real build resolves the module and push works as normal.
  */
 type NotificationsModule = typeof import('expo-notifications');
+
+/** Explains, in development only, why push did not register: the causes are otherwise invisible. */
+function devNote(message: string) {
+  if (__DEV__) console.warn(`[push] ${message}`);
+}
 let notificationsModule: NotificationsModule | null | undefined;
 
-function getNotifications(): NotificationsModule | null {
+export function getNotifications(): NotificationsModule | null {
   if (notificationsModule !== undefined) return notificationsModule;
   try {
     notificationsModule = require('expo-notifications') as NotificationsModule;
@@ -29,6 +34,7 @@ function getNotifications(): NotificationsModule | null {
     });
   } catch {
     notificationsModule = null;
+    devNote('expo-notifications is not available here. Push needs a development or production build, not Expo Go.');
   }
   return notificationsModule;
 }
@@ -56,7 +62,7 @@ function easProjectId() {
 
 export async function registerPushToken(options: { sendWelcome?: boolean } = {}) {
   try {
-    if (!Device.isDevice) return null;
+    if (!Device.isDevice) { devNote('Push tokens are only issued to a physical device, not a simulator or emulator.'); return null; }
     const Notifications = getNotifications();
     if (!Notifications) return null;
     await ensureAndroidChannel(Notifications);
@@ -66,12 +72,13 @@ export async function registerPushToken(options: { sendWelcome?: boolean } = {})
       const requested = await Notifications.requestPermissionsAsync();
       status = requested.status;
     }
-    if (status !== 'granted') return null;
+    if (status !== 'granted') { devNote('Notification permission was not granted. Enable it in the phone settings.'); return null; }
 
     const projectId = easProjectId();
+    if (!projectId) devNote('No EAS projectId found in app.json (extra.eas.projectId); the push token may fail.');
     const token = await Notifications.getExpoPushTokenAsync(projectId ? { projectId } : undefined);
     const session = await getSession();
-    if (!session?.accessToken) return null;
+    if (!session?.accessToken) { devNote('Not signed in yet, so the push token was not registered.'); return null; }
 
     await apiRequest('/devices/register', {
       method: 'POST',
@@ -83,6 +90,7 @@ export async function registerPushToken(options: { sendWelcome?: boolean } = {})
         sendWelcome: options.sendWelcome,
       }),
     });
+    if (__DEV__) console.info(`[push] Registered ${token.data}`);
     return token.data;
   } catch (error) {
     // Silent for users, but the usual cause on Android (a build without

@@ -33,6 +33,7 @@ import {
   useRemoveCartItemMutation,
   useUpdateCartItemMutation,
 } from "@/lib/mobile-api";
+import { useCommerceSyncing } from "@/lib/commerce-sync";
 import { isCustomerSession } from "@/lib/session";
 import { designTokens, centeredHeaderTextStyle } from "@/constants/design-tokens";
 import { useCartAddAnimation } from './useCartAddAnimation';
@@ -45,6 +46,7 @@ export function CartScreen({
 }: { showBackButton?: boolean } = {}) {
   const insets = useSafeAreaInsets();
   const cart = useCartQuery();
+  const syncingCommerce = useCommerceSyncing();
   const update = useUpdateCartItemMutation();
   const remove = useRemoveCartItemMutation();
   const removalAnimation = useCartAddAnimation();
@@ -213,7 +215,7 @@ export function CartScreen({
     router.push("/checkout" as never);
   }
 
-  if (cart.isLoading)
+  if (cart.isLoading || syncingCommerce)
     return <HookPageLoading title="Your cart" label="Loading your cart" />;
   if (cart.isError) return <CartError retry={() => cart.refetch()} />;
   const items = getCartItems(data);

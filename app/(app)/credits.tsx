@@ -49,7 +49,7 @@ export default function CreditsScreen() {
         showsVerticalScrollIndicator={false}
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => void refresh()} tintColor="#111111" />}
       >
-        <HookPageHeader title="Hook Coin" subtitle="Spend your Hook Coin on your next order." />
+        <HookPageHeader title="Hook credit" subtitle="Spend your Hook credit on your next order." />
 
         <View style={{ marginTop: 24, borderRadius: 22, backgroundColor: "#111111", padding: 20 }}>
           <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
@@ -60,7 +60,7 @@ export default function CreditsScreen() {
             {credits.isLoading || credits.isError ? "—" : naira(credits.data?.balanceMinor || 0)}
           </Text>
           <Text style={{ marginTop: 8, fontSize: 13, lineHeight: 21, color: "#DDDDDD" }}>
-            Hook Coin can cover up to {credits.data?.capPercent ?? 20}% of each order when you pay now, so a bigger
+            Hook credit can cover up to {credits.data?.capPercent ?? 20}% of each order when you pay now, so a bigger
             basket unlocks more of your balance.
           </Text>
         </View>
@@ -71,14 +71,14 @@ export default function CreditsScreen() {
           </View>
         ) : credits.isError ? (
           <Pressable accessibilityRole="button" onPress={() => void refresh()} style={{ padding: 24, marginTop: 20, borderRadius: 22, backgroundColor: "white" }}>
-            <Text style={{ color: "#111", textAlign: "center" }}>Couldn’t load your Hook Coin. Tap to retry.</Text>
+            <Text style={{ color: "#111", textAlign: "center" }}>Couldn’t load your Hook credit. Tap to retry.</Text>
           </Pressable>
         ) : !history.length ? (
           <View style={{ marginTop: 20, alignItems: "center", borderRadius: 22, backgroundColor: "white", padding: 24, gap: 12 }}>
             <Ionicons name="gift-outline" size={30} color="#777" />
-            <Text className="mt-3 text-base font-bold text-black">No Hook Coin yet</Text>
+            <Text className="mt-3 text-base font-bold text-black">No Hook credit yet</Text>
             <Text className="mt-1 text-center text-sm leading-5 text-[#666]">
-              Invite a friend to Hook and you both earn Hook Coin on their first order.
+              Invite a friend to Hook and you both earn Hook credit on their first order.
             </Text>
             <Pressable
               accessibilityRole="button"

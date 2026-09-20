@@ -6,8 +6,7 @@ import { Pressable, Text, TextInput, View } from 'react-native';
 import { AuthPrimaryButton, AuthScreenShell } from '@/components/auth/auth-screen-shell';
 import { toast } from '@/components/shared/toast';
 import { useResetPasswordMutation } from '@/lib/auth-api';
-import { registerPushToken } from '@/lib/push';
-import { saveSession } from '@/lib/session';
+import { completeSignIn } from '@/lib/post-sign-in';
 
 import { PASSWORD_MIN_LENGTH as MIN_LENGTH } from '@/lib/password-policy';
 
@@ -36,8 +35,7 @@ export function CreateNewPassword() {
     try {
       const session = await resetPassword.mutateAsync({ email, code, password });
       if (session?.accessToken) {
-        await saveSession(session);
-        await registerPushToken({ sendWelcome: true });
+        await completeSignIn(session);
       }
       toast.success('Password reset', 'Welcome back to Hook');
       router.replace('/(tabs)');

@@ -1,4 +1,5 @@
 import { Ionicons } from "@expo/vector-icons";
+import { useState } from "react";
 import { Pressable, Switch, Text, View } from "react-native";
 import { BottomSheetScrollView as ScrollView } from "@gorhom/bottom-sheet";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
@@ -47,117 +48,142 @@ export function PaymentMethodSheet({
     { icon: "shield-checkmark-outline", label: "Hook Protection" },
     { icon: "flash-outline", label: "Faster processing" },
     ...(estimatedEarnMinor > 0
-      ? [{ icon: "gift-outline" as const, label: `Earn ${naira(estimatedEarnMinor)} Hook Coin` }]
+      ? [{ icon: "gift-outline" as const, label: `Earn ${naira(estimatedEarnMinor)} Hook credit` }]
       : []),
     { icon: "remove-outline", label: "No POD handling fee" },
   ];
 
+  const [showWhy, setShowWhy] = useState(false);
+  const creditActive = hasCredits && useCredits;
+
   return (
     <CheckoutSheet visible={visible} onClose={onClose} title="How do you want to pay?" fullScreen>
-      <ScrollView
-        style={{ flex: 1 }}
-        contentContainerStyle={{ paddingHorizontal: 20, paddingBottom: Math.max(insets.bottom, 24) + 64 }}
-        showsVerticalScrollIndicator={false}
-        nestedScrollEnabled
-        keyboardShouldPersistTaps="handled"
-        contentInsetAdjustmentBehavior="never"
-        bounces
-      >
-        <View style={{ borderRadius: 18, backgroundColor: "#111", padding: 20 }}>
-          <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: 12 }}>
-            <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
-              <Ionicons name="wallet-outline" size={20} color="#FAFAFA" />
-              <Text style={{ fontSize: 15, color: "white" }}>Hook Coin</Text>
-            </View>
-            <View style={{ alignItems: "flex-end", gap: 4 }}>
-              <Text style={{ fontSize: 18, color: "#FFC809", fontFamily: "NunitoSans-Bold" }}>{naira(creditBalanceMinor)}</Text>
-              {hasCredits && useCredits ? (
-                <View style={{ borderRadius: 999, backgroundColor: "#FFC809", paddingHorizontal: 8, paddingVertical: 2 }}>
-                  <Text style={{ fontSize: 9, fontFamily: "NunitoSans-Bold", letterSpacing: 0.5, color: "#111" }}>AUTO ON</Text>
+      <View style={{ flex: 1, minHeight: 0 }}>
+        <ScrollView
+          style={{ flex: 1 }}
+          contentContainerStyle={{ paddingHorizontal: 20, paddingTop: 4, paddingBottom: 20, gap: 14 }}
+          showsVerticalScrollIndicator={false}
+          keyboardShouldPersistTaps="handled"
+          contentInsetAdjustmentBehavior="never"
+          bounces
+        >
+          {/* Hook credit: one compact row with its own switch. */}
+          <View style={{ borderRadius: 18, backgroundColor: "#111", padding: 16, gap: 14 }}>
+            <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: 12 }}>
+              <View style={{ flexDirection: "row", alignItems: "center", gap: 10 }}>
+                <View style={{ width: 36, height: 36, borderRadius: 12, alignItems: "center", justifyContent: "center", backgroundColor: "rgba(255,255,255,0.1)" }}>
+                  <Ionicons name="wallet-outline" size={19} color="#FAFAFA" />
+                </View>
+                <View>
+                  <Text style={{ fontSize: 14, color: "#BDBDBD" }}>Hook credit</Text>
+                  <Text style={{ fontSize: 20, color: "#FFC809", fontFamily: "NunitoSans-Bold" }}>{naira(creditBalanceMinor)}</Text>
+                </View>
+              </View>
+              {creditActive ? (
+                <View style={{ borderRadius: 999, backgroundColor: "#FFC809", paddingHorizontal: 9, paddingVertical: 3 }}>
+                  <Text style={{ fontSize: 10, fontFamily: "NunitoSans-Bold", letterSpacing: 0.5, color: "#111" }}>AUTO ON</Text>
                 </View>
               ) : null}
             </View>
-          </View>
-          <View style={{ marginTop: 16, flexDirection: "row", alignItems: "center", gap: 12, borderRadius: 16, padding: 12, backgroundColor: "#292929" }}>
-            <View style={{ flex: 1 }}>
-              <Text style={{ color: "white", fontSize: 14, fontFamily: "NunitoSans-Bold" }}>
-                {hasCredits && useCredits ? "Applied automatically" : "Use Hook Coin for this order"}
-              </Text>
-              {useCredits && creditsAppliedMinor > 0 ? (
-                <Text style={{ marginTop: 4, fontSize: 12, lineHeight: 18, color: "#DDD" }}>
-                  {naira(creditsAppliedMinor)} will reduce this order total
+            <View style={{ flexDirection: "row", alignItems: "center", gap: 12, borderRadius: 14, padding: 12, backgroundColor: "#262626" }}>
+              <View style={{ flex: 1 }}>
+                <Text style={{ color: "white", fontSize: 14, fontFamily: "NunitoSans-Bold" }}>
+                  {creditActive ? "Applied automatically" : "Use Hook credit for this order"}
                 </Text>
-              ) : !hasCredits ? (
-                <Text style={{ marginTop: 4, fontSize: 12, lineHeight: 18, color: "#DDD" }}>Earn Hook Coin by referring friends</Text>
-              ) : (
-                <Text style={{ marginTop: 4, fontSize: 12, lineHeight: 18, color: "#DDD" }}>
-                  Hook Coin is paused for this order
+                <Text style={{ marginTop: 3, fontSize: 12, lineHeight: 17, color: "#D4D4D4" }}>
+                  {useCredits && creditsAppliedMinor > 0
+                    ? `${naira(creditsAppliedMinor)} will reduce this order total`
+                    : !hasCredits
+                      ? "Earn Hook credit by referring friends"
+                      : "Hook credit is paused for this order"}
                 </Text>
-              )}
-            </View>
-            <Switch
-              accessibilityLabel="Automatically apply Hook Coin to this order"
-              value={useCredits}
-              disabled={!hasCredits}
-              onValueChange={onToggleCredits}
-              trackColor={{ false: "rgba(250,250,250,0.2)", true: "#FFC809" }}
-              thumbColor="#ffffff"
-            />
-          </View>
-        </View>
-
-        <Pressable
-          accessibilityRole="button"
-          onPress={onChoosePayNow}
-          className="mt-4 overflow-hidden rounded-2xl border-2 border-hook bg-[#fff9e5] p-5"
-          style={{ marginTop: 16, borderRadius: 18, borderWidth: 2, borderColor: "#FFC809", backgroundColor: "#FFF9E5", padding: 20, gap: 12 }}
-        >
-          <View style={{ alignSelf: "flex-end", backgroundColor: "#FFC809", borderRadius: 8, paddingHorizontal: 10, paddingVertical: 4 }}>
-            <Text className="text-xs font-bold tracking-wide text-black">RECOMMENDED</Text>
-          </View>
-          <View style={{ flexDirection: "row", alignItems: "center", gap: 12 }}>
-            <View style={{ width: 20, height: 20, alignItems: "center", justifyContent: "center", borderRadius: 10, backgroundColor: "#FFC809" }}>
-              <View style={{ width: 8, height: 8, borderRadius: 4, backgroundColor: "#111" }} />
-            </View>
-            <Text className="text-lg font-bold text-[#111]">PAY NOW</Text>
-          </View>
-          <Text style={{ marginLeft: 32, fontSize: 24, fontFamily: "NunitoSans-Black", color: "#111" }}>{naira(payNowTotalMinor)}</Text>
-
-          <View style={{ marginLeft: 32, gap: 12 }}>
-            {payNowBenefits.map((benefit) => (
-              <View key={benefit.label} style={{ flexDirection: "row", alignItems: "center", gap: 12 }}>
-                <Ionicons name={benefit.icon} size={16} color="#FFC809" />
-                <Text style={{ flex: 1, fontSize: 14, lineHeight: 20, color: "#111" }}>{benefit.label}</Text>
               </View>
-            ))}
+              <Switch
+                accessibilityLabel="Automatically apply Hook credit to this order"
+                value={useCredits}
+                disabled={!hasCredits}
+                onValueChange={onToggleCredits}
+                trackColor={{ false: "rgba(250,250,250,0.2)", true: "#FFC809" }}
+                thumbColor="#ffffff"
+              />
+            </View>
           </View>
 
-          <View style={{ marginLeft: 32, marginTop: 8, borderRadius: 16, backgroundColor: "white", borderWidth: 1, borderColor: "#EEE", padding: 16, gap: 8 }}>
-            <Text className="text-sm font-bold text-[#111]">Why pay now?</Text>
-            <View style={{ gap: 8 }}>
-              {WHY_PAY_NOW.map((reason) => (
-                <View key={reason} style={{ flexDirection: "row", gap: 8 }}>
-                  <Text className="text-sm leading-5 text-[#666]">✓</Text>
-                  <Text style={{ flex: 1, fontSize: 14, lineHeight: 20, color: "#666" }}>{reason}</Text>
+          {/* Pay now: selected. The card is display only; the footer button confirms. */}
+          <View style={{ borderRadius: 18, borderWidth: 2, borderColor: "#FFC809", backgroundColor: "#FFF9E5", padding: 16, gap: 14 }}>
+            <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: 10 }}>
+              <View style={{ flexDirection: "row", alignItems: "center", gap: 10 }}>
+                <View style={{ width: 22, height: 22, alignItems: "center", justifyContent: "center", borderRadius: 11, backgroundColor: "#FFC809" }}>
+                  <View style={{ width: 8, height: 8, borderRadius: 4, backgroundColor: "#111" }} />
+                </View>
+                <Text style={{ fontSize: 16, fontFamily: "NunitoSans-Bold", color: "#111" }}>Pay now</Text>
+              </View>
+              <View style={{ backgroundColor: "#FFC809", borderRadius: 8, paddingHorizontal: 9, paddingVertical: 3 }}>
+                <Text style={{ fontSize: 10, fontFamily: "NunitoSans-Bold", letterSpacing: 0.6, color: "#111" }}>RECOMMENDED</Text>
+              </View>
+            </View>
+            <Text style={{ fontSize: 28, fontFamily: "NunitoSans-Black", color: "#111" }}>{naira(payNowTotalMinor)}</Text>
+
+            <View style={{ gap: 10 }}>
+              {payNowBenefits.map((benefit) => (
+                <View key={benefit.label} style={{ flexDirection: "row", alignItems: "center", gap: 10 }}>
+                  <View style={{ width: 26, height: 26, borderRadius: 9, alignItems: "center", justifyContent: "center", backgroundColor: "#FFF1B8" }}>
+                    <Ionicons name={benefit.icon} size={15} color="#8A6900" />
+                  </View>
+                  <Text style={{ flex: 1, fontSize: 14, lineHeight: 20, color: "#111" }}>{benefit.label}</Text>
                 </View>
               ))}
             </View>
-          </View>
-        </Pressable>
 
-        {/* Kept visible but inert while POD is paused, so returning customers
-            can see the option still exists rather than wondering where it went. */}
-        <View accessible accessibilityLabel="Pay on delivery is currently unavailable" accessibilityState={{ disabled: true }} style={{ marginTop: 16, borderRadius: 18, borderWidth: 1, borderColor: "#DDD", padding: 20, gap: 12, opacity: 0.7 }}>
-          <View style={{ flexDirection: "row", alignItems: "center", gap: 12 }}>
-            <View style={{ width: 20, height: 20, borderRadius: 10, borderWidth: 1.5, borderColor: "#666" }} />
-            <Text className="text-lg font-bold text-[#111]">PAY ON DELIVERY</Text>
+            <Pressable
+              accessibilityRole="button"
+              accessibilityState={{ expanded: showWhy }}
+              onPress={() => setShowWhy((current) => !current)}
+              style={{ borderRadius: 14, backgroundColor: "white", borderWidth: 1, borderColor: "#EEE", paddingHorizontal: 14, paddingVertical: 12 }}
+            >
+              <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between" }}>
+                <Text style={{ fontSize: 14, fontFamily: "NunitoSans-Bold", color: "#111" }}>Why pay now?</Text>
+                <Ionicons name={showWhy ? "chevron-up" : "chevron-down"} size={18} color="#666" />
+              </View>
+              {showWhy ? (
+                <View style={{ marginTop: 10, gap: 8 }}>
+                  {WHY_PAY_NOW.map((reason) => (
+                    <View key={reason} style={{ flexDirection: "row", gap: 8 }}>
+                      <Ionicons name="checkmark-circle" size={16} color="#30B940" style={{ marginTop: 2 }} />
+                      <Text style={{ flex: 1, fontSize: 14, lineHeight: 20, color: "#555" }}>{reason}</Text>
+                    </View>
+                  ))}
+                </View>
+              ) : null}
+            </Pressable>
           </View>
-          <Text style={{ marginLeft: 32, fontSize: 24, fontFamily: "NunitoSans-Black", color: "#666" }}>{naira(podTotalMinor)}</Text>
-          <Text style={{ marginLeft: 32, fontSize: 14, lineHeight: 21, color: "#666" }}>
-            {podPaused ? "Temporarily paused. Please pay now to place this order." : "Currently unavailable in this checkout. Please choose Pay Now."}
-          </Text>
+
+          {/* Kept visible but inert while POD is paused, so returning customers
+              can see the option still exists rather than wondering where it went. */}
+          <View accessible accessibilityLabel="Pay on delivery is currently unavailable" accessibilityState={{ disabled: true }} style={{ borderRadius: 18, borderWidth: 1, borderColor: "#DDD", padding: 16, gap: 8, opacity: 0.7 }}>
+            <View style={{ flexDirection: "row", alignItems: "center", gap: 10 }}>
+              <View style={{ width: 22, height: 22, borderRadius: 11, borderWidth: 1.5, borderColor: "#666" }} />
+              <Text style={{ fontSize: 16, fontFamily: "NunitoSans-Bold", color: "#111" }}>Pay on delivery</Text>
+            </View>
+            <Text style={{ fontSize: 22, fontFamily: "NunitoSans-Black", color: "#666" }}>{naira(podTotalMinor)}</Text>
+            <Text style={{ fontSize: 13, lineHeight: 19, color: "#666" }}>
+              {podPaused ? "Temporarily paused. Please pay now to place this order." : "Currently unavailable in this checkout. Please choose Pay now."}
+            </Text>
+          </View>
+        </ScrollView>
+
+        {/* Always visible: the decision never scrolls out of reach. */}
+        <View style={{ paddingHorizontal: 20, paddingTop: 12, paddingBottom: Math.max(insets.bottom, 16), borderTopWidth: 1, borderTopColor: "#E6E6E9", backgroundColor: "#F1F1F3" }}>
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel={`Pay ${naira(payNowTotalMinor)} now`}
+            onPress={onChoosePayNow}
+            style={({ pressed }) => ({ height: 54, borderRadius: 27, alignItems: "center", justifyContent: "center", backgroundColor: "#FFC809", opacity: pressed ? 0.85 : 1 })}
+          >
+            <Text style={{ fontSize: 16, fontFamily: "NunitoSans-Bold", color: "#111" }}>Continue with Pay now · {naira(payNowTotalMinor)}</Text>
+          </Pressable>
         </View>
-      </ScrollView>
+      </View>
     </CheckoutSheet>
   );
 }

@@ -4,9 +4,7 @@ import { toast } from '@/components/shared/toast';
 import { ApiError } from '@/lib/api';
 import { promptScheduledDeletion, scheduledDeletionDate } from '@/lib/account-deletion-api';
 import { useGoogleLoginMutation } from '@/lib/auth-api';
-import { registerPushToken } from '@/lib/push';
-import { saveSession } from '@/lib/session';
-import { syncAnonymousCommerce } from '@/lib/commerce-sync';
+import { completeSignIn } from '@/lib/post-sign-in';
 
 /**
  * The native SDK issues ID tokens whose audience is the Web client ID, so it is
@@ -74,8 +72,7 @@ export function useHookGoogleAuth() {
       }
 
       const session = await googleLogin.mutateAsync({ idToken });
-      await saveSession(session);
-      await Promise.allSettled([syncAnonymousCommerce(), registerPushToken({ sendWelcome: true })]);
+      await completeSignIn(session);
       toast.success('Welcome to Hook', 'Google sign-in completed.');
     } catch (error) {
       if (isErrorWithCode(error) && error.code === statusCodes.SIGN_IN_CANCELLED) return;

@@ -189,7 +189,7 @@ export default function ProfileScreen() {
           <ProfileSection title="Rewards">
             <ProfileRow
               icon="wallet"
-              label="Hook Coin"
+              label="Hook credit"
               value={creditsLabel}
               onPress={() => router.push("/credits" as never)}
             />

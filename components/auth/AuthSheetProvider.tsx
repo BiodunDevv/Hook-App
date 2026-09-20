@@ -42,26 +42,51 @@ export function AuthSheetProvider({ children }: PropsWithChildren) {
   const hasSocialAuth = google.isGoogleReady || (Platform.OS === "ios" && apple.isAppleReady);
   const snapPoints = useMemo(() => ["100%"], []);
 
-  useEffect(() => onSessionChanged(() => {
-    void getSession().then((session) => {
-      if (isCustomerSession(session)) {
-        sheet.current?.close();
-        const destination = intent.current;
-        intent.current = undefined;
-        if (destination) router.replace(destination);
-      }
+  // Whether a customer is signed in. The sheet must never be visible then, so
+  // this is checked on open, on every session change, and on every sheet change.
+  const signedIn = useRef(false);
+  const hardClose = useCallback(() => {
+    authOpen.current = false;
+    Keyboard.dismiss();
+    // forceClose ignores an in-flight animation or keyboard transition, which
+    // is why a plain close() could leave the sheet stuck on screen.
+    sheet.current?.forceClose();
+  }, []);
+
+  useEffect(() => {
+    void getSession().then((session) => { signedIn.current = isCustomerSession(session); });
+    return onSessionChanged(() => {
+      void getSession().then((session) => {
+        signedIn.current = isCustomerSession(session);
+        if (isCustomerSession(session)) {
+          hardClose();
+          const destination = intent.current;
+          intent.current = undefined;
+          if (destination) router.replace(destination);
+        }
+      });
     });
-  }), []);
+  }, [hardClose]);
 
   const reset = useCallback(() => {
     Keyboard.dismiss();
   }, []);
-  const closeAuth = useCallback(() => { authOpen.current = false; sheet.current?.close(); reset(); }, [reset]);
+  const closeAuth = useCallback(() => { hardClose(); reset(); }, [hardClose, reset]);
   const hasPendingIntent = useCallback(() => Boolean(intent.current), []);
   const openAuth = useCallback((next?: Href) => {
-    authOpen.current = true;
-    intent.current = next || (pathname as Href);
-    sheet.current?.expand();
+    // Already signed in: there is nothing to sign in to. Carry on to where the
+    // customer was headed instead of showing the login sheet.
+    void getSession().then((session) => {
+      if (isCustomerSession(session)) {
+        signedIn.current = true;
+        if (next && next !== pathname) router.push(next);
+        return;
+      }
+      signedIn.current = false;
+      authOpen.current = true;
+      intent.current = next || (pathname as Href);
+      sheet.current?.expand();
+    });
   }, [pathname]);
 
   function openLegal(type: "terms" | "privacy") {
@@ -114,6 +139,7 @@ export function AuthSheetProvider({ children }: PropsWithChildren) {
         handleComponent={null}
         backdropComponent={(props) => <BottomSheetBackdrop {...props} appearsOnIndex={0} disappearsOnIndex={-1} opacity={0.32} pressBehavior="close" />}
         backgroundStyle={{ backgroundColor: "#F7F7F8", borderRadius: 0 }}
+        onChange={(index) => { if (index >= 0 && signedIn.current) hardClose(); }}
         onClose={() => {
           authOpen.current = false;
           reset();

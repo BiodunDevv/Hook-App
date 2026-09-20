@@ -13,18 +13,21 @@ export function CheckoutRow({
   onPress,
   disabled,
   loading = false,
+  readOnly = false,
 }: {
   placeholder: string;
   value?: string;
   onPress: () => void;
   disabled?: boolean;
   loading?: boolean;
+  /** Shows a fixed value: no press, no Change button. */
+  readOnly?: boolean;
 }) {
   return (
     <Pressable
       accessibilityRole="button"
       accessibilityLabel={loading ? "Loading delivery options" : value ? `${placeholder}: ${value}` : placeholder}
-      disabled={disabled}
+      disabled={disabled || readOnly}
       accessibilityState={{ disabled: Boolean(disabled), busy: loading }}
       onPress={onPress}
       style={{ minHeight: 52, flexDirection: "row", alignItems: "center", justifyContent: "space-between", borderRadius: 18, backgroundColor: "white", paddingHorizontal: 16, paddingVertical: 12, gap: 12, opacity: disabled ? 0.6 : 1 }}
@@ -34,7 +37,7 @@ export function CheckoutRow({
       >
         {loading ? value ? `${value} · Updating…` : "Loading delivery options…" : value || placeholder}
       </Text>
-      {loading ? <HookLoader size="button" /> : value ? (
+      {loading ? <HookLoader size="button" /> : value && !readOnly ? (
         <View style={{ borderRadius: 8, backgroundColor: "#FFDD66", padding: 8 }}>
           <Text className="text-xs text-[#3a3a3a]">Change</Text>
         </View>

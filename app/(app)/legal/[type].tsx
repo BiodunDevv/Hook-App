@@ -1,6 +1,8 @@
 import { router, useLocalSearchParams } from "expo-router";
 import { centeredHeaderTextStyle } from "@/constants/design-tokens";
 import { ScrollView, Text, View } from "react-native";
+import { HookRefreshControl } from "@/components/shared/HookRefreshControl";
+import { usePullRefresh } from "@/hooks/use-pull-refresh";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { useAuthSheet } from "@/components/auth/AuthSheetProvider";
@@ -79,6 +81,7 @@ export default function LegalContentScreen() {
   const legalType = type === "privacy" || type === "returns" ? type : "terms";
   const query = useLegalContentQuery(legalType);
   const title = query.data?.title || TITLES[legalType];
+  const { refreshing, onRefresh } = usePullRefresh(() => query.refetch());
 
   function goBack() {
     if (from === "auth") {
@@ -103,6 +106,7 @@ export default function LegalContentScreen() {
         <View className="w-11" />
       </View>
       <ScrollView
+        refreshControl={<HookRefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
         contentContainerStyle={{ padding: 20, paddingBottom: insets.bottom + 40 }}
         showsVerticalScrollIndicator={false}
       >

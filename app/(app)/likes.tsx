@@ -1,6 +1,8 @@
 import { Ionicons } from "@expo/vector-icons";
 import { centeredHeaderTextStyle } from "@/constants/design-tokens";
 import { router } from "expo-router";
+import { HookRefreshControl } from "@/components/shared/HookRefreshControl";
+import { usePullRefresh } from "@/hooks/use-pull-refresh";
 import { FlatList, Pressable, Text, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
@@ -16,6 +18,7 @@ export default function LikesScreen() {
   const insets = useSafeAreaInsets();
   const session = useCustomerSessionQuery();
   const likes = useLikedProductsQuery();
+  const { refreshing, onRefresh } = usePullRefresh(() => likes.refetch());
   const products =
     likes.data?.items.map((item) => item.product).filter(Boolean) || [];
 
@@ -57,6 +60,7 @@ export default function LikesScreen() {
       </View>
       <FlatList
         data={products}
+        refreshControl={<HookRefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
         numColumns={2}
         keyExtractor={(item) => item!.publicId}
         columnWrapperStyle={{ gap: 12 }}
