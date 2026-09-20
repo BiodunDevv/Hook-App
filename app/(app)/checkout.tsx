@@ -35,13 +35,20 @@ import {
   useCreditsQuery,
   useCustomerSessionQuery,
   useLogisticsProvidersQuery,
+  useOperatingStatesQuery,
   useValidateCouponMutation,
   type LogisticsProvider,
 } from "@/lib/mobile-api";
+import { HookRefreshControl } from "@/components/shared/HookRefreshControl";
+import { usePullRefresh } from "@/hooks/use-pull-refresh";
+import { EmptyCheckout } from "@/components/checkout/EmptyCheckout";
+import { useCommerceSyncing } from "@/lib/commerce-sync";
 import { isCustomerSession } from "@/lib/session";
 import { calculateHookCoinEarnMinor } from "@/lib/hook-coin";
 
 const VAT_RATE = 0.075;
+// Used only until the State price loads; the server quote is authoritative.
+const DEFAULT_DELIVERY_FEE_MINOR = 300_000;
 
 export default function CheckoutScreen() {
   const insets = useSafeAreaInsets();
@@ -50,6 +57,7 @@ export default function CheckoutScreen() {
   const signedIn = isCustomerSession(session.data);
 
   const cart = useCartQuery();
+  const syncingCommerce = useCommerceSyncing();
   const addresses = useAddressesQuery();
   const config = useCommerceConfigQuery();
   const logistics = useLogisticsProvidersQuery(signedIn);
@@ -67,7 +75,9 @@ export default function CheckoutScreen() {
   const [couponInput, setCouponInput] = useState("");
   const [coupon, setCoupon] = useState<{ code: string; discountMinor: number; appliesToDelivery: boolean }>();
   const [acceptedPolicies, setAcceptedPolicies] = useState(false);
-  const [paymentChosen, setPaymentChosen] = useState(false);
+  // Pay now is the default. The customer only picks when another method (Pay
+  // on delivery) is actually available.
+  const [paymentChosen, setPaymentChosen] = useState(true);
   const [sheet, setSheet] = useState<"address" | "logistics" | "payment" | null>(null);
   // Set once checkout is submitted; survives the cart being emptied by confirm.
   const [paymentStage, setPaymentStage] = useState<PaymentStage | null>(null);
@@ -77,11 +87,30 @@ export default function CheckoutScreen() {
     addressRows.find((item) => item.publicId === addressId)
     || addressRows.find((item) => item.isDefault)
     || addressRows[0];
+  const operatingStates = useOperatingStatesQuery();
+  // Pulling refreshes everything checkout shows: the cart, addresses, delivery
+  // prices, couriers, wallet and commerce settings.
+  const { refreshing, onRefresh } = usePullRefresh(
+    () => cart.refetch(),
+    () => addresses.refetch(),
+    () => config.refetch(),
+    () => operatingStates.refetch(),
+    () => (signedIn ? logistics.refetch() : undefined),
+    () => (signedIn ? credits.refetch() : undefined),
+  );
+  const normaliseState = (value?: string) => String(value || "").toLowerCase().replace(/\bstate\b/g, "").replace(/[^a-z]/g, "");
+  const addressState = operatingStates.data?.find(
+    (state) =>
+      (selectedAddress?.stateId && (state.publicId === selectedAddress.stateId || state.code === selectedAddress.stateId)) ||
+      (selectedAddress?.stateName && normaliseState(state.name) === normaliseState(selectedAddress.stateName)),
+  );
+  const stateDeliveryFeeMinor = Number(addressState?.deliveryFeeMinor ?? DEFAULT_DELIVERY_FEE_MINOR);
   const cartItems = getCartItems(cart.data);
   const providers = logistics.data || [];
   const podPaused = Boolean((config.data as { podPaused?: boolean } | undefined)?.podPaused);
+  const podAvailable = Boolean((config.data as { podEnabled?: boolean } | undefined)?.podEnabled) && !podPaused;
 
-  // Hook Coin is applied by default as soon as the wallet is available. A
+  // Hook credit is applied by default as soon as the wallet is available. A
   // customer's explicit choice is then preserved for the rest of this
   // checkout, even if the wallet query refreshes in the background.
   useEffect(() => {
@@ -107,7 +136,8 @@ export default function CheckoutScreen() {
       (sum, item) => sum + Number(item.totalPriceMinor ?? Number(item.unitPriceMinor || 0) * Number(item.quantity || 0)),
       0,
     );
-    const grossDeliveryMinor = Number(provider?.feeMinor || 0);
+    // Delivery is priced by the State in the delivery address, not by courier.
+    const grossDeliveryMinor = stateDeliveryFeeMinor;
     const couponDiscountMinor = coupon?.discountMinor || 0;
     const deliveryDiscount = coupon?.appliesToDelivery ? couponDiscountMinor : 0;
     const itemDiscount = coupon?.appliesToDelivery ? 0 : couponDiscountMinor;
@@ -130,7 +160,7 @@ export default function CheckoutScreen() {
       totalMinor: Math.max(0, payableBeforeCredits - creditsAppliedMinor),
       payableBeforeCredits,
     };
-  }, [cartItems, provider, coupon, useCredits, credits.data]);
+  }, [cartItems, stateDeliveryFeeMinor, coupon, useCredits, credits.data]);
 
   const busy = preview.isPending || confirm.isPending || createPaymentLink.isPending;
   const estimatedEarnMinor = calculateHookCoinEarnMinor(money.subtotalMinor, config.data);
@@ -157,7 +187,7 @@ export default function CheckoutScreen() {
       const result = await validateCoupon.mutateAsync({
         code,
         subtotalMinor: money.subtotalMinor,
-        deliveryFeeMinor: Number(provider?.feeMinor || 0),
+        deliveryFeeMinor: stateDeliveryFeeMinor,
       });
       setCoupon({
         code: result.code,
@@ -267,18 +297,12 @@ export default function CheckoutScreen() {
 
   if (paymentStage) return <PaymentProcessingScreen stage={paymentStage} />;
 
-  if (cart.isLoading || addresses.isLoading || config.isLoading)
-    return <HookPageLoading title="Checkout" label="Preparing checkout" />;
+  // While a guest cart is being merged into the account (or the server cart is
+  // still loading), the cart is not "empty", it is on its way.
+  if (cart.isLoading || addresses.isLoading || config.isLoading || syncingCommerce || (!cartItems.length && cart.isFetching))
+    return <HookPageLoading title="Checkout" label={syncingCommerce ? "Moving your cart to your account" : "Preparing checkout"} />;
 
-  if (!cartItems.length)
-    return (
-      <View className="flex-1 items-center justify-center bg-[#f1f1f3] px-8">
-        <Text className="text-xl font-black">Your cart is empty</Text>
-        <Pressable onPress={() => router.replace("/(app)/cart")} className="mt-5 rounded-full bg-hook px-6 py-3">
-          <Text className="font-bold text-black">Browse Hook</Text>
-        </Pressable>
-      </View>
-    );
+  if (!cartItems.length) return <EmptyCheckout />;
 
   const addressLabel = selectedAddress
     ? [selectedAddress.line1, selectedAddress.cityName].filter(Boolean).join(", ")
@@ -298,6 +322,7 @@ export default function CheckoutScreen() {
       </View>
       <ScrollView
         style={{ flex: 1 }}
+        refreshControl={<HookRefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
         contentContainerStyle={{
           padding: 16,
           // Clears the 52pt floating action without leaving a large empty
@@ -330,11 +355,11 @@ export default function CheckoutScreen() {
 
         <View style={{ marginTop: 24, gap: 10 }}>
           <Text className="text-base font-medium text-black">Payment</Text>
-          <CheckoutRow placeholder="Choose payment method" value={paymentChosen ? "Pay now" : undefined} onPress={() => setSheet("payment")} />
+          <CheckoutRow placeholder="Payment method" value={paymentChosen ? "Pay now" : undefined} readOnly={!podAvailable} onPress={() => setSheet("payment")} />
           {money.creditsAppliedMinor > 0 ? (
             <Pressable
               accessibilityRole="button"
-              accessibilityLabel={`Hook Coin is on. ${Math.round(money.creditsAppliedMinor / 100).toLocaleString("en-NG")} naira will be applied automatically. Tap to change.`}
+              accessibilityLabel={`Hook credit is on. ${Math.round(money.creditsAppliedMinor / 100).toLocaleString("en-NG")} naira will be applied automatically. Tap to change.`}
               onPress={() => setSheet("payment")}
               style={{ flexDirection: "row", alignItems: "center", gap: 10, borderRadius: 14, borderWidth: 1, borderColor: "#E9B900", backgroundColor: "#FFF9E5", paddingHorizontal: 14, paddingVertical: 11 }}
             >
@@ -342,7 +367,7 @@ export default function CheckoutScreen() {
                 <Ionicons name="wallet-outline" size={16} color="#111" />
               </View>
               <View style={{ flex: 1 }}>
-                <Text style={{ fontSize: 13, fontFamily: "NunitoSans-Bold", color: "#111" }}>Hook Coin is on</Text>
+                <Text style={{ fontSize: 13, fontFamily: "NunitoSans-Bold", color: "#111" }}>Hook credit is on</Text>
                 <Text style={{ marginTop: 1, fontSize: 12, lineHeight: 17, color: "#666" }}>
                   ₦{Math.round(money.creditsAppliedMinor / 100).toLocaleString("en-NG")} will be used automatically.
                 </Text>

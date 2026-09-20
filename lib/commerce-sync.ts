@@ -1,12 +1,36 @@
 import * as Crypto from "expo-crypto";
+import { useSyncExternalStore } from "react";
 
 import { apiRequest } from "@/lib/api";
 import { clearImportedAnonymousCommerce, getAnonymousCommerce } from "@/lib/anonymous-commerce";
 
 let activeSync: Promise<unknown> | null = null;
+const listeners = new Set<() => void>();
+
+let syncingFlag = false;
+
+function setSyncing(active: boolean) {
+  if (syncingFlag === active) return;
+  syncingFlag = active;
+  listeners.forEach((listener) => listener());
+}
+
+/**
+ * True while a guest cart and favourites are being merged into the account.
+ * Screens that read the cart show their loading state instead of "empty" for
+ * that moment, so a signed-in customer never sees a cart that is about to fill.
+ */
+export function useCommerceSyncing() {
+  return useSyncExternalStore(
+    (listener) => { listeners.add(listener); return () => { listeners.delete(listener); }; },
+    () => syncingFlag,
+    () => false,
+  );
+}
 
 export function syncAnonymousCommerce() {
   if (activeSync) return activeSync;
+  setSyncing(true);
   activeSync = (async () => {
     const local = await getAnonymousCommerce();
     if (!local.cartItems.length && !local.likedProducts.length) return null;
@@ -21,6 +45,6 @@ export function syncAnonymousCommerce() {
     });
     await clearImportedAnonymousCommerce(result.acceptedCartLineIds || [], result.acceptedLikedProductIds || []);
     return result;
-  })().finally(() => { activeSync = null; });
+  })().finally(() => { activeSync = null; setSyncing(false); });
   return activeSync;
 }

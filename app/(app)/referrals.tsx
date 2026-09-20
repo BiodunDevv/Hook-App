@@ -7,12 +7,14 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { HookPageHeader } from "@/components/shared/HookPageHeader";
 import { HookLoader } from "@/components/shared/HookLoader";
 import { toast } from "@/components/shared/toast";
-import { useReferralsQuery } from "@/lib/mobile-api";
+import { useCreditConfigQuery, useReferralsQuery } from "@/lib/mobile-api";
 import { screenPadding } from "@/constants/design-tokens";
 
 function naira(minor: number) {
   return `₦${Math.round(Number(minor || 0) / 100).toLocaleString("en-NG")}`;
 }
+
+const money = (minor: number) => `₦${(minor / 100).toLocaleString("en-NG")}`;
 
 function Stat({ label, value }: { label: string; value: string }) {
   return (
@@ -26,6 +28,10 @@ function Stat({ label, value }: { label: string; value: string }) {
 export default function ReferralsScreen() {
   const insets = useSafeAreaInsets();
   const referrals = useReferralsQuery();
+  // The rewards are set by the admin, so they are read, never hard-coded.
+  const creditConfig = useCreditConfigQuery().data;
+  const friendGets = money(creditConfig?.referralSignupBonusMinor ?? 30000);
+  const youEarn = money(creditConfig?.referralReferrerBonusMinor ?? 100000);
   const [refreshing, setRefreshing] = useState(false);
 
   const code = referrals.data?.code || "";
@@ -54,7 +60,7 @@ export default function ReferralsScreen() {
     if (!code) return;
     try {
     await Share.share({
-      message: `Shop Nigerian markets with Hook. Use my code ${code} when you sign up and we both earn Hook Coin.`,
+      message: `Shop Nigerian markets with Hook. Use my code ${code} when you sign up and we both earn Hook credit.`,
     });
     } catch {
       toast.error("Couldn’t open sharing. Please try again.");
@@ -72,10 +78,10 @@ export default function ReferralsScreen() {
 
         <View style={{ marginTop: 24, borderRadius: 22, backgroundColor: "#FFC809", padding: 20, gap: 12 }}>
           <Ionicons name="gift" size={26} color="#111" />
-          <Text className="mt-4 text-lg font-black text-black">Give ₦300, get ₦1,000</Text>
+          <Text className="mt-4 text-lg font-black text-black">Give {friendGets}, get {youEarn}</Text>
           <Text className="mt-1 text-sm leading-5 text-black/60">
-            Your friend gets ₦300 in Hook Coin the moment they join with your code. You earn ₦1,000 once they complete
-            their first order.
+            Your friend gets {friendGets} in Hook credit the moment they join with your code. You earn {youEarn} once they
+            complete their first order.
           </Text>
         </View>
 

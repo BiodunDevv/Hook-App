@@ -109,7 +109,24 @@ export class HookRealtimeClient {
 }
 export const hookRealtime = new HookRealtimeClient();
 
-function invalidateForEvent(queryClient: ReturnType<typeof useQueryClient>, event: string) {
+/** What an admin changed in configuration: refetch only the data that depends on it. */
+function invalidateForConfig(queryClient: ReturnType<typeof useQueryClient>, scope?: string) {
+  const keys: Record<string, string[][]> = {
+    // State prices and coverage feed checkout and the address pickers.
+    delivery: [["mobile", "operating-states"], ["mobile", "public"], ["mobile", "addresses"], ["mobile", "cart"]],
+    logistics: [["mobile", "logistics-providers"]],
+    commerce: [["mobile", "commerce-config"], ["mobile", "credit-config"], ["mobile", "credits"], ["mobile", "referrals"], ["mobile", "cart"]],
+    legal: [["mobile", "legal"]],
+    coupons: [["mobile", "coupons"]],
+  };
+  for (const queryKey of keys[scope || ""] || []) queryClient.invalidateQueries({ queryKey });
+}
+
+function invalidateForEvent(queryClient: ReturnType<typeof useQueryClient>, event: string, payload?: RealtimePayload) {
+  if (event === "config.updated") {
+    invalidateForConfig(queryClient, (payload?.data as { scope?: string } | undefined)?.scope);
+    return;
+  }
   if (event === "realtime.connected") {
     queryClient.invalidateQueries({ queryKey: ["mobile", "feed"] });
     queryClient.invalidateQueries({ queryKey: ["mobile", "discover"] });
@@ -122,6 +139,7 @@ function invalidateForEvent(queryClient: ReturnType<typeof useQueryClient>, even
     queryClient.invalidateQueries({ queryKey: ["mobile", "cart"] });
     queryClient.invalidateQueries({ queryKey: ["mobile", "likes"] });
     queryClient.invalidateQueries({ queryKey: ["mobile", "negotiations"] });
+    for (const scope of ["delivery", "logistics", "commerce", "legal", "coupons"]) invalidateForConfig(queryClient, scope);
     return;
   }
   if (event === "home.updated" || event === "catalog.updated") {
@@ -167,7 +185,7 @@ export function MobileRealtimeBridge() {
         })();
         return;
       }
-      invalidateForEvent(queryClient, event);
+      invalidateForEvent(queryClient, event, payload);
     });
     const stopSession = onSessionChanged(() => void client.connect());
     const handleAppState = (nextState: AppStateStatus) => {

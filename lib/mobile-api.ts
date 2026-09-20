@@ -123,6 +123,8 @@ export interface HookOperatingState {
   capitalName?: string;
   code: string;
   deliveryEnabled?: boolean;
+  /** What the customer pays to have an order delivered to this State, in kobo. */
+  deliveryFeeMinor?: number;
   deliveryPromiseHours?: number;
 }
 
@@ -1062,6 +1064,25 @@ export type CommerceConfig = {
   orderEarnPercent: number;
   orderEarnMaxMinor: number;
 };
+
+/** Hook credit rules as the admin has set them (earn rate, referral rewards). Public: needed before sign-in. */
+export type CreditConfig = {
+  orderEarnEnabled: boolean;
+  orderEarnPercent: number;
+  orderEarnMaxMinor: number;
+  creditSpendCapPercent: number;
+  welcomeBonusMinor: number;
+  referralSignupBonusMinor: number;
+  referralReferrerBonusMinor: number;
+};
+
+export function useCreditConfigQuery() {
+  return useQuery({
+    queryKey: ["mobile", "credit-config"] as const,
+    queryFn: () => apiRequest<CreditConfig>("/public/credit-config", { auth: false }),
+    staleTime: 60_000,
+  });
+}
 
 export function useCommerceConfigQuery() {
   return useQuery({

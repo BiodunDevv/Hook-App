@@ -14,6 +14,7 @@ export type AddressRow = {
   landmark?: string;
   cityName?: string;
   stateName?: string;
+  stateId?: string;
   isDefault?: boolean;
 };
 

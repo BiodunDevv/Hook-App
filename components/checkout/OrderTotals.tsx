@@ -39,7 +39,7 @@ export function OrderTotals({
           <Line label={couponCode ? `Coupon (${couponCode})` : "Coupon"} value={`-${naira(couponDiscountMinor)}`} />
         ) : null}
         {creditsAppliedMinor > 0 ? (
-          <Line label="Hook Coin" value={`-${naira(creditsAppliedMinor)}`} />
+          <Line label="Hook credit" value={`-${naira(creditsAppliedMinor)}`} />
         ) : null}
         <Line label="Delivery fee" value={deliveryFeeMinor > 0 ? naira(deliveryFeeMinor) : "—"} />
         <View style={{ marginTop: 4, flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: 12, borderRadius: 16, backgroundColor: "#FFDD66", padding: 16 }}>

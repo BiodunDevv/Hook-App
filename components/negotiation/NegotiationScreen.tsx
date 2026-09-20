@@ -2,6 +2,8 @@ import { router, useLocalSearchParams } from "expo-router";
 import { centeredHeaderTextStyle } from "@/constants/design-tokens";
 import * as Crypto from "expo-crypto";
 import { useQueryClient } from "@tanstack/react-query";
+import { HookRefreshControl } from "@/components/shared/HookRefreshControl";
+import { usePullRefresh } from "@/hooks/use-pull-refresh";
 import { useEffect, useMemo, useRef, useState } from "react";
 import {
   FlatList,
@@ -93,6 +95,7 @@ export default function NegotiationScreen() {
     quantity,
   );
   const session = useNegotiationQuery(sessionId);
+  const { refreshing, onRefresh } = usePullRefresh(() => session.refetch());
   const data = session.data || lastResponse || active.data;
   const productQuery = useProductQuery(data?.product?.id || contextProductId);
   const start = useStartNegotiationMutation();
@@ -373,6 +376,7 @@ export default function NegotiationScreen() {
       <FlatList
         ref={list}
         data={messages}
+        refreshControl={<HookRefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
         keyExtractor={negotiationMessageKey}
         keyboardShouldPersistTaps="handled"
         keyboardDismissMode={Platform.OS === "ios" ? "interactive" : "on-drag"}

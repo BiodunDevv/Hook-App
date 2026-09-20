@@ -8,8 +8,7 @@ import { useAuthSheet } from '@/components/auth/AuthSheetProvider';
 import { toast } from '@/components/shared/toast';
 import { promptScheduledDeletion, restoreDeletedAccount, scheduledDeletionDate } from '@/lib/account-deletion-api';
 import { useLoginMutation } from '@/lib/auth-api';
-import { registerPushToken } from '@/lib/push';
-import { saveSession } from '@/lib/session';
+import { completeSignIn } from '@/lib/post-sign-in';
 
 import { PASSWORD_MIN_LENGTH as MIN_LENGTH } from '@/lib/password-policy';
 
@@ -32,8 +31,7 @@ export function PasswordLogin() {
     try {
       const shouldResume = hasPendingIntent();
       const session = await login.mutateAsync({ email, password });
-      await saveSession(session);
-      await registerPushToken({ sendWelcome: true });
+      await completeSignIn(session);
       toast.success('Welcome back', 'You are signed in');
       if (!shouldResume) router.replace('/(tabs)');
     } catch (error) {

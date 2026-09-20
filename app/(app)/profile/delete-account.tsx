@@ -96,7 +96,7 @@ export default function DeleteAccountScreen() {
       <View className="mt-6 rounded-[14px] bg-white p-4">
         <Text className="text-base font-black">What happens</Text>
         <Text className="mt-2 text-sm leading-5 text-[#555]">
-          Your account is closed now and you are signed out on every device. After {DAYS} days your name, email, phone number, saved addresses and Hook Coin balance are permanently deleted. You can restore your account any time before then.
+          Your account is closed now and you are signed out on every device. After {DAYS} days your name, email, phone number, saved addresses and Hook credit balance are permanently deleted. You can restore your account any time before then.
         </Text>
         <Text className="mt-3 text-sm leading-5 text-[#555]">
           We keep order and payment records the law requires, with your identity removed. Orders still being delivered, or refunds still being processed, must finish first.
@@ -126,7 +126,7 @@ export default function DeleteAccountScreen() {
 
       <Pressable onPress={() => setConfirmed((value) => !value)} accessibilityRole="checkbox" accessibilityState={{ checked: confirmed }} className="mt-4 flex-row items-start rounded-[14px] bg-white p-4">
         <Ionicons name={confirmed ? 'checkbox' : 'square-outline'} size={22} color={confirmed ? '#111' : '#999'} />
-        <Text className="ml-3 flex-1 text-sm leading-5">I understand my account will be permanently deleted after {DAYS} days and any Hook Coin balance will be lost.</Text>
+        <Text className="ml-3 flex-1 text-sm leading-5">I understand my account will be permanently deleted after {DAYS} days and any Hook credit balance will be lost.</Text>
       </Pressable>
 
       {blocked ? (

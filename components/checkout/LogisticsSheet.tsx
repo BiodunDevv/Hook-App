@@ -8,10 +8,6 @@ import { CheckoutSheet } from "./CheckoutSheet";
 import { HookLoader } from "@/components/shared/HookLoader";
 import type { LogisticsProvider } from "@/lib/mobile-api";
 
-function naira(minor: number) {
-  return `₦${Math.round(Number(minor || 0) / 100).toLocaleString("en-NG")}`;
-}
-
 export function LogisticsSheet({
   visible,
   providers,
@@ -92,7 +88,6 @@ export function LogisticsSheet({
                     ) : null}
                   </View>
                   <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
-                    <Text className="text-base font-semibold text-black">{naira(provider.feeMinor)}</Text>
                     {active ? <Ionicons name="checkmark-circle" size={20} color="#FFC809" /> : null}
                   </View>
                 </Pressable>
