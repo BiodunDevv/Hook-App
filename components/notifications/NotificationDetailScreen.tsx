@@ -1,4 +1,5 @@
 import { Ionicons } from '@expo/vector-icons';
+import { SkeletonTextPage } from "@/components/motion/Skeleton";
 import { router, Stack, useLocalSearchParams } from 'expo-router';
 import { useEffect, useRef, useState } from 'react';
 import { Image, Platform, Pressable, RefreshControl, ScrollView, Text, View } from 'react-native';
@@ -130,8 +131,8 @@ export default function NotificationDetailScreen() {
       />
 
       {notification.isLoading ? (
-        <View style={{ alignItems: 'center', flex: 1, justifyContent: 'center', gap: 12 }}>
-          <HookLoader size="page" label="Loading notification..." />
+        <View style={{ flex: 1, paddingTop: 12 }}>
+          <SkeletonTextPage />
         </View>
       ) : !item ? (
         <View style={{ alignItems: 'center', flex: 1, justifyContent: 'center', paddingHorizontal: 36 }}>

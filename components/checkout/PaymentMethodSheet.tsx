@@ -26,6 +26,13 @@ export function PaymentMethodSheet({
   payNowTotalMinor,
   podTotalMinor,
   podPaused,
+  stateName,
+  method,
+  onSelectMethod,
+  podAvailable,
+  podUnavailableReason,
+  podPayNowMinor,
+  podAtDoorMinor,
   onToggleCredits,
   onChoosePayNow,
   onClose,
@@ -38,6 +45,14 @@ export function PaymentMethodSheet({
   payNowTotalMinor: number;
   podTotalMinor: number;
   podPaused: boolean;
+  stateName?: string;
+  method: "PREPAID" | "PAY_AT_HANDOVER";
+  onSelectMethod: (method: "PREPAID" | "PAY_AT_HANDOVER") => void;
+  podAvailable: boolean;
+  /** Why Pay on Delivery cannot be chosen right now (shown on the card). */
+  podUnavailableReason?: string;
+  podPayNowMinor: number;
+  podAtDoorMinor: number;
   onToggleCredits: (next: boolean) => void;
   onChoosePayNow: () => void;
   onClose: () => void;
@@ -50,18 +65,18 @@ export function PaymentMethodSheet({
     ...(estimatedEarnMinor > 0
       ? [{ icon: "gift-outline" as const, label: `Earn ${naira(estimatedEarnMinor)} Hook credit` }]
       : []),
-    { icon: "remove-outline", label: "No POD handling fee" },
+    { icon: "remove-outline", label: "No pay-on-delivery charge" },
   ];
 
   const [showWhy, setShowWhy] = useState(false);
-  const creditActive = hasCredits && useCredits;
+  const creditActive = hasCredits && useCredits && method === "PREPAID";
 
   return (
     <CheckoutSheet visible={visible} onClose={onClose} title="How do you want to pay?" fullScreen>
       <View style={{ flex: 1, minHeight: 0 }}>
         <ScrollView
           style={{ flex: 1 }}
-          contentContainerStyle={{ paddingHorizontal: 20, paddingTop: 4, paddingBottom: 20, gap: 14 }}
+          contentContainerStyle={{ paddingHorizontal: 20, paddingTop: 4, paddingBottom: Math.max(insets.bottom, 16) + 8, gap: 14 }}
           showsVerticalScrollIndicator={false}
           keyboardShouldPersistTaps="handled"
           contentInsetAdjustmentBehavior="never"
@@ -91,7 +106,9 @@ export function PaymentMethodSheet({
                   {creditActive ? "Applied automatically" : "Use Hook credit for this order"}
                 </Text>
                 <Text style={{ marginTop: 3, fontSize: 12, lineHeight: 17, color: "#D4D4D4" }}>
-                  {useCredits && creditsAppliedMinor > 0
+                  {method === "PAY_AT_HANDOVER" && hasCredits
+                    ? "Hook credit is used when you pay now, not on Pay on Delivery"
+                    : useCredits && creditsAppliedMinor > 0
                     ? `${naira(creditsAppliedMinor)} will reduce this order total`
                     : !hasCredits
                       ? "Earn Hook credit by referring friends"
@@ -110,11 +127,11 @@ export function PaymentMethodSheet({
           </View>
 
           {/* Pay now: selected. The card is display only; the footer button confirms. */}
-          <View style={{ borderRadius: 18, borderWidth: 2, borderColor: "#FFC809", backgroundColor: "#FFF9E5", padding: 16, gap: 14 }}>
+          <Pressable accessibilityRole="radio" accessibilityState={{ selected: method === "PREPAID" }} onPress={() => { onSelectMethod("PREPAID"); onChoosePayNow(); }} style={{ borderRadius: 18, borderWidth: 2, borderColor: method === "PREPAID" ? "#FFC809" : "#DDD", backgroundColor: method === "PREPAID" ? "#FFF9E5" : "white", padding: 16, gap: 14 }}>
             <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: 10 }}>
               <View style={{ flexDirection: "row", alignItems: "center", gap: 10 }}>
-                <View style={{ width: 22, height: 22, alignItems: "center", justifyContent: "center", borderRadius: 11, backgroundColor: "#FFC809" }}>
-                  <View style={{ width: 8, height: 8, borderRadius: 4, backgroundColor: "#111" }} />
+                <View style={{ width: 22, height: 22, alignItems: "center", justifyContent: "center", borderRadius: 11, borderWidth: method === "PREPAID" ? 0 : 1.5, borderColor: "#999", backgroundColor: method === "PREPAID" ? "#FFC809" : "transparent" }}>
+                  {method === "PREPAID" ? <View style={{ width: 8, height: 8, borderRadius: 4, backgroundColor: "#111" }} /> : null}
                 </View>
                 <Text style={{ fontSize: 16, fontFamily: "NunitoSans-Bold", color: "#111" }}>Pay now</Text>
               </View>
@@ -156,33 +173,62 @@ export function PaymentMethodSheet({
                 </View>
               ) : null}
             </Pressable>
-          </View>
+          </Pressable>
 
-          {/* Kept visible but inert while POD is paused, so returning customers
-              can see the option still exists rather than wondering where it went. */}
-          <View accessible accessibilityLabel="Pay on delivery is currently unavailable" accessibilityState={{ disabled: true }} style={{ borderRadius: 18, borderWidth: 1, borderColor: "#DDD", padding: 16, gap: 8, opacity: 0.7 }}>
-            <View style={{ flexDirection: "row", alignItems: "center", gap: 10 }}>
-              <View style={{ width: 22, height: 22, borderRadius: 11, borderWidth: 1.5, borderColor: "#666" }} />
-              <Text style={{ fontSize: 16, fontFamily: "NunitoSans-Bold", color: "#111" }}>Pay on delivery</Text>
+          {/* Pay on delivery: same design as Pay now. The big figure is what is paid online now. */}
+          <Pressable
+            accessibilityRole="radio"
+            accessibilityState={{ selected: method === "PAY_AT_HANDOVER", disabled: !podAvailable }}
+            disabled={!podAvailable}
+            onPress={() => { onSelectMethod("PAY_AT_HANDOVER"); onChoosePayNow(); }}
+            style={{ borderRadius: 18, borderWidth: 2, borderColor: method === "PAY_AT_HANDOVER" ? "#FFC809" : "#DDD", backgroundColor: method === "PAY_AT_HANDOVER" ? "#FFF9E5" : "white", padding: 16, gap: 14, opacity: podAvailable ? 1 : 0.7 }}
+          >
+            <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: 10 }}>
+              <View style={{ flexDirection: "row", alignItems: "center", gap: 10 }}>
+                <View style={{ width: 22, height: 22, alignItems: "center", justifyContent: "center", borderRadius: 11, borderWidth: method === "PAY_AT_HANDOVER" ? 0 : 1.5, borderColor: "#999", backgroundColor: method === "PAY_AT_HANDOVER" ? "#FFC809" : "transparent" }}>
+                  {method === "PAY_AT_HANDOVER" ? <View style={{ width: 8, height: 8, borderRadius: 4, backgroundColor: "#111" }} /> : null}
+                </View>
+                <Text style={{ fontSize: 16, fontFamily: "NunitoSans-Bold", color: "#111" }}>Pay on delivery</Text>
+              </View>
+              <View style={{ backgroundColor: podAvailable ? "#E6F7E9" : "#EEE", borderRadius: 8, paddingHorizontal: 9, paddingVertical: 3 }}>
+                <Text style={{ fontSize: 10, fontFamily: "NunitoSans-Bold", letterSpacing: 0.6, color: podAvailable ? "#1E7A2E" : "#666" }}>
+                  {podAvailable ? (stateName ? `AVAILABLE IN ${stateName.toUpperCase()}` : "AVAILABLE") : "NOT AVAILABLE"}
+                </Text>
+              </View>
             </View>
-            <Text style={{ fontSize: 22, fontFamily: "NunitoSans-Black", color: "#666" }}>{naira(podTotalMinor)}</Text>
-            <Text style={{ fontSize: 13, lineHeight: 19, color: "#666" }}>
-              {podPaused ? "Temporarily paused. Please pay now to place this order." : "Currently unavailable in this checkout. Please choose Pay now."}
-            </Text>
-          </View>
+
+            {podAvailable ? (
+              <>
+                <View>
+                  <Text style={{ fontSize: 28, fontFamily: "NunitoSans-Black", color: "#111" }}>{naira(podPayNowMinor)}<Text style={{ fontSize: 14, fontFamily: "NunitoSans-Bold", color: "#666" }}>  now</Text></Text>
+                  <Text style={{ marginTop: 2, fontSize: 14, color: "#555" }}>then {naira(podAtDoorMinor)} when it arrives</Text>
+                </View>
+                <View style={{ gap: 10 }}>
+                  {([
+                    { icon: "bicycle-outline", label: "Pay the delivery fee now to start your order" },
+                    { icon: "card-outline", label: "Pay the rest securely with a link at the door" },
+                    { icon: "alert-circle-outline", label: "Delivery fee isn't refunded if you refuse the parcel" },
+                  ] as { icon: React.ComponentProps<typeof Ionicons>["name"]; label: string }[]).map((benefit) => (
+                    <View key={benefit.label} style={{ flexDirection: "row", alignItems: "center", gap: 10 }}>
+                      <View style={{ width: 26, height: 26, borderRadius: 9, alignItems: "center", justifyContent: "center", backgroundColor: "#FFF1B8" }}>
+                        <Ionicons name={benefit.icon} size={15} color="#8A6900" />
+                      </View>
+                      <Text style={{ flex: 1, fontSize: 14, lineHeight: 20, color: "#111" }}>{benefit.label}</Text>
+                    </View>
+                  ))}
+                </View>
+              </>
+            ) : (
+              <View style={{ flexDirection: "row", alignItems: "flex-start", gap: 10 }}>
+                <Ionicons name="information-circle-outline" size={18} color="#777" style={{ marginTop: 1 }} />
+                <Text style={{ flex: 1, fontSize: 14, lineHeight: 20, color: "#666" }}>
+                  {podPaused ? "Temporarily paused. Please pay now to place this order." : podUnavailableReason || "Not available for this order. Please choose Pay now."}
+                </Text>
+              </View>
+            )}
+          </Pressable>
         </ScrollView>
 
-        {/* Always visible: the decision never scrolls out of reach. */}
-        <View style={{ paddingHorizontal: 20, paddingTop: 12, paddingBottom: Math.max(insets.bottom, 16), borderTopWidth: 1, borderTopColor: "#E6E6E9", backgroundColor: "#F1F1F3" }}>
-          <Pressable
-            accessibilityRole="button"
-            accessibilityLabel={`Pay ${naira(payNowTotalMinor)} now`}
-            onPress={onChoosePayNow}
-            style={({ pressed }) => ({ height: 54, borderRadius: 27, alignItems: "center", justifyContent: "center", backgroundColor: "#FFC809", opacity: pressed ? 0.85 : 1 })}
-          >
-            <Text style={{ fontSize: 16, fontFamily: "NunitoSans-Bold", color: "#111" }}>Continue with Pay now · {naira(payNowTotalMinor)}</Text>
-          </Pressable>
-        </View>
       </View>
     </CheckoutSheet>
   );

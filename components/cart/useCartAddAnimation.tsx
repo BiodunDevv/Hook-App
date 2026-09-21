@@ -61,7 +61,7 @@ export function useCartAddAnimation(productId?: string) {
     if (!flight) return;
     const duration = flight.reverse ? Math.min(500, flight.duration || DURATION) : flight.duration || DURATION;
     progress.value = withTiming(flight.reverse ? 0 : 1, { duration, easing: Easing.inOut(Easing.cubic) });
-    if (!flight.reverse) cartScale.value = withDelay(DURATION - 100, withSequence(withTiming(1.12, { duration: 120 }), withTiming(1, { duration: 180 })));
+    if (!flight.reverse) cartScale.value = withDelay(Math.max(0, duration - 100), withSequence(withTiming(1.12, { duration: 120 }), withTiming(1, { duration: 180 })));
     const timeout = setTimeout(() => setFlight(null), duration + 100);
     return () => clearTimeout(timeout);
   }, [flight, cartScale, progress]);

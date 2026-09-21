@@ -1,4 +1,5 @@
 import { Ionicons } from "@expo/vector-icons";
+import { SkeletonRows } from "@/components/motion/Skeleton";
 import { router } from "expo-router";
 import { useMemo, useRef, useState } from "react";
 import {
@@ -74,7 +75,7 @@ export function StateSelectionScreen() {
   const hero = (
     <>
       <View
-        className="relative overflow-visible bg-[#FFDA55] px-4 pb-7"
+        className="relative overflow-hidden rounded-b-[28px] bg-[#FFDA55] px-4 pb-5"
         style={{ paddingTop: insets.top + 10 }}
       >
         <HookYellowPattern />
@@ -182,8 +183,8 @@ export function StateSelectionScreen() {
         }}
         ListEmptyComponent={
           query.isLoading ? (
-            <View className="items-center py-24">
-              <HookLoader label="Loading states" />
+            <View className="-mx-0 pt-4">
+              <SkeletonRows count={7} label="Loading states" />
             </View>
           ) : (
             <View className="items-center py-24">
@@ -216,7 +217,7 @@ export function StateSelectionScreen() {
 
       <Animated.View
         pointerEvents={compactHeaderVisible ? "auto" : "none"}
-        className="absolute inset-x-0 top-0 z-30 border-b border-black/5 bg-[#FFDA55] px-4 pb-3"
+        className="absolute inset-x-0 top-0 z-30 rounded-b-[20px] bg-[#FFDA55] px-4 pb-3"
         style={{
           opacity: compactHeaderOpacity,
           paddingTop: insets.top + 8,

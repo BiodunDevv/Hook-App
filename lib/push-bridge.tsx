@@ -2,20 +2,10 @@ import { router } from "expo-router";
 import { useEffect } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 
+import { apiRequest } from "@/lib/api";
 import { getNotifications, registerPushToken } from "@/lib/push";
+import { routeForPush, type PushData } from "@/lib/push-routes";
 import { getSession, isCustomerSession, onSessionChanged } from "@/lib/session";
-
-type PushData = { type?: string; orderId?: string; notificationId?: string } & Record<string, unknown>;
-
-/** Where tapping a notification should land. Unknown kinds fall back to the inbox. */
-function destinationFor(data: PushData) {
-  const type = String(data.type || "");
-  if (type === "welcome" || type === "welcome_back") return "/(tabs)";
-  if (data.orderId && /order|payment|shipment|delivery|refund|substitution|hub|dispatch/i.test(type || "order")) {
-    return `/orders/${data.orderId}`;
-  }
-  return "/notifications";
-}
 
 /**
  * Everything push does after the token exists: keep the token fresh, refresh
@@ -39,7 +29,9 @@ export function PushNotificationBridge() {
     if (Notifications) {
       const open = (data: PushData) => {
         void queryClient.invalidateQueries({ queryKey: ["mobile", "notifications"] });
-        router.push(destinationFor(data) as never);
+        // Tell Hook this one was acted on (best effort), then open its screen.
+        if (data.notificationId) void apiRequest(`/notifications/${data.notificationId}/opened`, { method: "POST" }).catch(() => undefined);
+        router.push(routeForPush(data) as never);
       };
 
       const received = Notifications.addNotificationReceivedListener((notification) => {

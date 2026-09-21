@@ -93,7 +93,7 @@ export default function LegalContentScreen() {
   }
 
   if (query.isLoading) {
-    return <HookPageLoading title={title} label={`Loading ${title.toLowerCase()}`} onBack={goBack} />;
+    return <HookPageLoading variant="text" title={title} label={`Loading ${title.toLowerCase()}`} onBack={goBack} />;
   }
 
   return (

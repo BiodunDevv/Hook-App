@@ -1,6 +1,8 @@
+import { haptics } from "@/lib/haptics";
+import { PressScale } from "@/components/motion/PressScale";
 import { Ionicons } from "@expo/vector-icons";
 import type { PropsWithChildren } from "react";
-import { Pressable, StyleSheet, Text, View } from "react-native";
+import { StyleSheet, Text, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { HookLoader } from "@/components/shared/HookLoader";
@@ -40,14 +42,18 @@ export function BottomActionButton({
       : designTokens.color.surfaceMuted;
 
   return (
-    <Pressable
+    <PressScale
       accessibilityRole="button"
       accessibilityLabel={label}
       accessibilityState={{ disabled: inactive, busy: loading || busy }}
-      className="active:opacity-80"
       disabled={inactive}
-      onPress={onPress}
-      style={[styles.button, { flex, backgroundColor }]}
+      onPress={() => {
+        haptics.press();
+        onPress();
+      }}
+      scale={0.97}
+      style={{ flex }}
+      innerStyle={[styles.button, { backgroundColor }]}
     >
       {loading ? (
         <HookLoader size="button" />
@@ -59,7 +65,7 @@ export function BottomActionButton({
           {icon ? <Ionicons name={icon} size={18} color={designTokens.color.ink} style={styles.icon} /> : null}
         </>
       )}
-    </Pressable>
+    </PressScale>
   );
 }
 

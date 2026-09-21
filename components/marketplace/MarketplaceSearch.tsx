@@ -21,7 +21,8 @@ export function MarketplaceSearch({
       style={[{ fontFamily: "NunitoSans-Regular" }, style]}
     />
   );
-  const showClear = Boolean(onClear && typeof props.value === "string" && props.value.length > 0);
+  const showClear = typeof props.value === "string" && props.value.length > 0;
+  const clear = onClear ?? (() => props.onChangeText?.(""));
 
   return (
     <View className="h-[50px] flex-row items-center rounded-[20px] bg-white px-4">
@@ -30,7 +31,7 @@ export function MarketplaceSearch({
       ) : null}
       {input}
       {showClear ? (
-        <Pressable accessibilityLabel="Clear search" onPress={onClear} className="ml-2">
+        <Pressable accessibilityLabel="Clear search" onPress={clear} hitSlop={10} className="ml-2">
           <Ionicons name="close-circle" size={19} color="#98989D" />
         </Pressable>
       ) : null}

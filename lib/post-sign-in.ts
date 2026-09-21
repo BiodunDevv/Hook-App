@@ -1,4 +1,4 @@
-import { syncAnonymousCommerce } from "@/lib/commerce-sync";
+import { beginCommerceSync, endCommerceSync, syncAnonymousCommerce } from "@/lib/commerce-sync";
 import { registerPushToken } from "@/lib/push";
 import { saveSession, type AuthSession } from "@/lib/session";
 
@@ -11,6 +11,13 @@ import { saveSession, type AuthSession } from "@/lib/session";
  * retried on the next sign-in.
  */
 export async function completeSignIn(session: AuthSession) {
-  await saveSession(session);
+  // Flag the merge before the session is saved: saving it can navigate straight to checkout.
+  beginCommerceSync();
+  try {
+    await saveSession(session);
+  } catch (error) {
+    endCommerceSync();
+    throw error;
+  }
   await Promise.allSettled([syncAnonymousCommerce(), registerPushToken({ sendWelcome: true })]);
 }

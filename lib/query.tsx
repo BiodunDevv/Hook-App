@@ -22,6 +22,8 @@ export function AppQueryProvider({ children }: PropsWithChildren) {
           },
           mutations: {
             retry: 0,
+            // Never park a purchase behind the offline flag: try it, and let it fail with a clear error the customer can act on.
+            networkMode: "always",
           },
         },
       }),

@@ -1,3 +1,4 @@
+import { ClearableInput } from "@/components/shared/ClearableInput";
 import { Ionicons } from "@expo/vector-icons";
 import { centeredHeaderTextStyle } from "@/constants/design-tokens";
 import { useRef, useState } from "react";
@@ -260,7 +261,7 @@ export default function AddressesScreen() {
   }
 
   if (addresses.isLoading) {
-    return <HookPageLoading title="Delivery addresses" label="Loading addresses" />;
+    return <HookPageLoading variant="list" title="Delivery addresses" label="Loading addresses" />;
   }
 
   return (
@@ -684,7 +685,7 @@ function AddressStep({
       </Text>
       <View className="gap-4">
         <LabeledField label="Address label" limit={FIELD_LIMITS.label} value={draft.label}>
-          <TextInput
+          <ClearableInput
             className={inputClass}
             placeholder="e.g. Home, Office"
             placeholderTextColor="#999"
@@ -695,7 +696,7 @@ function AddressStep({
         </LabeledField>
 
         <LabeledField label="Recipient name" limit={FIELD_LIMITS.recipientName} value={draft.recipientName}>
-          <TextInput
+          <ClearableInput
             className={inputClass}
             placeholder="Full name of who receives it"
             placeholderTextColor="#999"
@@ -707,7 +708,7 @@ function AddressStep({
         </LabeledField>
 
         <LabeledField label="Phone number" value={draft.phone}>
-          <TextInput
+          <ClearableInput
             className={inputClass}
             placeholder="080 000 0000"
             placeholderTextColor="#999"
@@ -732,7 +733,7 @@ function AddressStep({
         </LabeledField>
 
         <LabeledField label="Apartment, floor or suite" optional limit={FIELD_LIMITS.line2} value={draft.line2 || ""}>
-          <TextInput
+          <ClearableInput
             className={inputClass}
             placeholder="e.g. Flat 3B"
             placeholderTextColor="#999"

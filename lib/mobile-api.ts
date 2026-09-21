@@ -1,5 +1,7 @@
 import { withStableIdempotency } from "@/lib/idempotency";
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { haptics } from "@/lib/haptics";
+import { variantSignature, type SelectedVariants } from "@/lib/variant-axes";
+import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useEffect } from "react";
 import * as Crypto from "expo-crypto";
 
@@ -32,7 +34,7 @@ export interface PublicCatalogMedia {
 export type SizingGuide = {
   summary?: string;
   howToMeasure?: string;
-  presetGroups: ("clothing" | "shoes" | "general")[];
+  presetGroups: ("clothing" | "shoes" | "kids-shoes" | "bra" | "general")[];
   chart?: { size: string; measurements: Record<string, string> }[];
 };
 
@@ -51,6 +53,10 @@ export interface PublicCatalogProduct {
     slug: string;
     iconUrl?: string;
     sizingGuide?: SizingGuide | null;
+    /** The top-level category, for breadcrumbs. Null on a top-level category. */
+    parent?: { publicId?: string; name: string; slug: string } | null;
+    /** What a product here asks the customer to choose (size, colour, capacity...). */
+    attributes?: CategoryAttribute[];
   } | null;
   variants: {
     /** Undefined for legacy options derived from a product's colors/sizes. */
@@ -72,12 +78,26 @@ export interface PublicCatalogProduct {
   publishedAt?: string;
 }
 
+export interface CategoryAttribute {
+  key: string;
+  label: string;
+  type: "size" | "colour" | "select" | "text";
+  required: boolean;
+  options?: string[];
+  preset?: string;
+  variantAxis: boolean;
+}
+
 export interface PublicCategory {
   publicId: string;
   name: string;
   slug: string;
   iconUrl?: string;
   description?: string;
+  /** Sub-categories, present on top-level categories. */
+  children?: PublicCategory[];
+  parentId?: string | null;
+  attributes?: CategoryAttribute[];
   productCount?: number;
   isComingSoon?: boolean;
 }
@@ -126,6 +146,11 @@ export interface HookOperatingState {
   /** What the customer pays to have an order delivered to this State, in kobo. */
   deliveryFeeMinor?: number;
   deliveryPromiseHours?: number;
+  /** Whether Pay on Delivery is switched on for this State, and the largest order it allows (kobo). */
+  podEnabled?: boolean;
+  podLimitMinor?: number | null;
+  /** The smallest order that can use Pay on Delivery in this State (kobo); absent means the global minimum. */
+  podMinimumOrderMinor?: number | null;
 }
 
 export interface PublicLocalGovernment {
@@ -296,6 +321,33 @@ export function useProductsQuery(params?: QueryParams, enabled = true) {
   });
 }
 
+/** Cursor-paged product feed for endless "more like this" lists. */
+export function useInfiniteProductsQuery(params?: QueryParams, enabled = true) {
+  return useInfiniteQuery({
+    enabled,
+    queryKey: [...mobileQueryKeys.products(params), "infinite"] as const,
+    initialPageParam: undefined as string | undefined,
+    queryFn: ({ pageParam }) =>
+      apiRequest<PublicProductPage>(
+        `/public/products${toQueryString({ ...params, cursor: pageParam })}`,
+        { auth: false },
+      ),
+    getNextPageParam: (last) => (last.hasMore ? last.nextCursor ?? undefined : undefined),
+  });
+}
+
+/** Starts loading a product before its page opens, so the page is ready by the time it appears. */
+export function usePrefetchProduct() {
+  const queryClient = useQueryClient();
+  return (id: string) => {
+    void queryClient.prefetchQuery({
+      queryKey: mobileQueryKeys.product(id),
+      queryFn: () => apiRequest<PublicCatalogProduct>(`/public/products/${id}`, { auth: false }),
+      staleTime: 30_000,
+    });
+  };
+}
+
 export function useProductQuery(id?: string) {
   return useQuery({
     enabled: Boolean(id),
@@ -390,11 +442,21 @@ export function useMarketsQuery(params?: QueryParams) {
 }
 
 export function useMarketQuery(id?: string) {
+  const queryClient = useQueryClient();
   return useQuery({
     enabled: Boolean(id),
     queryKey: mobileQueryKeys.market(id || ""),
     queryFn: () =>
       apiRequest<PublicMarket>(`/public/markets/${id}`, { auth: false }),
+    // Opening a market from a list already has its name and picture, so the page
+    // shell appears at once and only the products load in place.
+    placeholderData: () => {
+      for (const [, list] of queryClient.getQueriesData<PublicMarket[]>({ queryKey: ["mobile", "public", "markets"] })) {
+        const found = Array.isArray(list) ? list.find((item) => item.publicId === id) : undefined;
+        if (found) return found;
+      }
+      return undefined;
+    },
   });
 }
 
@@ -413,7 +475,7 @@ export function useCategoriesQuery() {
   return useQuery({
     queryKey: mobileQueryKeys.categories(),
     queryFn: () =>
-      apiRequest<PublicCategory[]>("/public/categories", { auth: false }),
+      apiRequest<PublicCategory[]>("/public/categories?withProducts=true", { auth: false }),
   });
 }
 
@@ -523,6 +585,7 @@ export function useToggleProductLikeMutation() {
           : apiRequest(`/likes/${productId}`, { method: "PUT" });
       }),
     onMutate: async ({ productId, liked }) => {
+      haptics.select();
       await queryClient.cancelQueries({ queryKey: likesKey });
       const previous = queryClient.getQueryData<ProductLikesResponse>(likesKey);
       const current = previous || { productIds: [], items: [] };
@@ -569,7 +632,7 @@ export function useCartQuery() {
         ? await apiRequest<PublicCatalogProduct[]>(
             `/public/products/status${toQueryString({ ids: ids.join(",") })}`,
             { auth: false },
-          ).catch(() => [])
+          ).catch(() => undefined)
         : [];
       return anonymousCartResponse(local, products);
     },
@@ -624,7 +687,7 @@ export function getCartGroupItems(cart: any, group: any): any[] {
 type AddCartItemInput = {
   productId: string;
   quantity: number;
-  selectedVariants?: { color?: string; size?: string };
+  selectedVariants?: SelectedVariants;
   variantId?: string;
   quoteId?: string;
   // Optional product used for instant cart feedback.
@@ -663,6 +726,7 @@ export function useAddCartItemMutation() {
       return { previous };
     },
     onSuccess: (data) => {
+      haptics.success();
       // Replace the optimistic snapshot when a full cart is returned.
       if (
         data &&
@@ -704,12 +768,6 @@ function cartLineTotalMinor(item: any): number {
   return unitPrice * Number(item?.quantity ?? 0);
 }
 
-function normalizedVariantValue(value: unknown) {
-  return String(value || "")
-    .trim()
-    .toLowerCase();
-}
-
 function matchesOptimisticLine(item: any, input: AddCartItemInput) {
   const productId =
     item?.productId || item?.product?.publicId || item?.product?.id;
@@ -718,14 +776,7 @@ function matchesOptimisticLine(item: any, input: AddCartItemInput) {
     return String(item.variantId) === String(input.variantId);
   }
 
-  const current = item?.selectedVariants || {};
-  const selected = input.selectedVariants || {};
-  return (
-    normalizedVariantValue(current.color) ===
-      normalizedVariantValue(selected.color) &&
-    normalizedVariantValue(current.size) ===
-      normalizedVariantValue(selected.size)
-  );
+  return variantSignature(item?.selectedVariants) === variantSignature(input.selectedVariants);
 }
 
 function provisionalCartItem(input: AddCartItemInput) {
@@ -733,12 +784,7 @@ function provisionalCartItem(input: AddCartItemInput) {
   if (!product) return null;
 
   const selectedVariants = input.selectedVariants || {};
-  const variantKey =
-    input.variantId ||
-    [
-      normalizedVariantValue(selectedVariants.color) || "-",
-      normalizedVariantValue(selectedVariants.size) || "-",
-    ].join("::");
+  const variantKey = input.variantId || variantSignature(selectedVariants);
   const unitPriceMinor = Number(product.effectivePriceMinor || 0);
   const optimisticId = `optimistic-${product.publicId}-${variantKey}`;
   const quantity = Math.max(Number(input.quantity) || 1, 1);
@@ -952,6 +998,7 @@ export function useUpdateCartItemMutation() {
       return patch(`/cart/items/${input.itemId}`, { quantity: input.quantity });
     },
     onMutate: async ({ itemId, quantity }) => {
+      haptics.select();
       const cartKey = mobileQueryKeys.cart();
       await queryClient.cancelQueries({ queryKey: cartKey });
       const previous = queryClient.getQueryData(cartKey);
@@ -981,6 +1028,7 @@ export function useRemoveCartItemMutation() {
   return useMutation({
     retry: false,
     onMutate: async (itemId: string) => {
+      haptics.press();
       const key = mobileQueryKeys.cart();
       await queryClient.cancelQueries({ queryKey: key });
       const previous = queryClient.getQueryData(key);
@@ -1003,6 +1051,7 @@ export function useClearCartMutation() {
   return useMutation({
     retry: false,
     onMutate: async () => {
+      haptics.press();
       const key = mobileQueryKeys.cart();
       await queryClient.cancelQueries({ queryKey: key });
       const previous = queryClient.getQueryData(key);
@@ -1063,6 +1112,13 @@ export type CommerceConfig = {
   orderEarnEnabled: boolean;
   orderEarnPercent: number;
   orderEarnMaxMinor: number;
+  /** Smallest cart subtotal (kobo) that may be checked out. 0 means no minimum. */
+  minimumCheckoutMinor?: number;
+  /** Pay on Delivery: smallest order, the surcharge, and VAT. All set by the admin. */
+  podMinimumOrderMinor?: number;
+  podSurchargeType?: "flat" | "percent";
+  podSurchargeValue?: number;
+  vatRatePercent?: number;
 };
 
 /** Hook credit rules as the admin has set them (earn rate, referral rewards). Public: needed before sign-in. */
@@ -1074,6 +1130,8 @@ export type CreditConfig = {
   welcomeBonusMinor: number;
   referralSignupBonusMinor: number;
   referralReferrerBonusMinor: number;
+  /** Smallest cart subtotal (kobo) that may be checked out. Public, so guests see it too. */
+  minimumCheckoutMinor?: number;
 };
 
 export function useCreditConfigQuery() {
@@ -1081,6 +1139,69 @@ export function useCreditConfigQuery() {
     queryKey: ["mobile", "credit-config"] as const,
     queryFn: () => apiRequest<CreditConfig>("/public/credit-config", { auth: false }),
     staleTime: 60_000,
+  });
+}
+
+/** The minimum order value in kobo (0 = none). Read from the public config so guests and signed-in customers agree. */
+export function useMinimumCheckoutMinor() {
+  const config = useCreditConfigQuery();
+  return config.data?.minimumCheckoutMinor ?? 0;
+}
+
+export type NotificationPreferences = {
+  groups: { orders: boolean; account: boolean; credit: boolean; reminders: boolean; discovery: boolean };
+  quietHours: { enabled: boolean; start: string; end: string };
+};
+
+export function useNotificationPreferencesQuery(enabled = true) {
+  return useQuery({
+    queryKey: ["mobile", "notification-preferences"] as const,
+    queryFn: () => apiRequest<NotificationPreferences>("/notifications/preferences"),
+    enabled,
+  });
+}
+
+export function useUpdateNotificationPreferences() {
+  const client = useQueryClient();
+  return useMutation({
+    mutationFn: (patch: { groups?: Partial<NotificationPreferences["groups"]>; quietHours?: Partial<NotificationPreferences["quietHours"]> }) =>
+      apiRequest<NotificationPreferences>("/notifications/preferences", { method: "PATCH", body: JSON.stringify(patch) }),
+    // Optimistic: the switch moves at once and rolls back if the save fails.
+    onMutate: async (patch) => {
+      await client.cancelQueries({ queryKey: ["mobile", "notification-preferences"] });
+      const previous = client.getQueryData<NotificationPreferences>(["mobile", "notification-preferences"]);
+      if (previous) {
+        client.setQueryData<NotificationPreferences>(["mobile", "notification-preferences"], {
+          groups: { ...previous.groups, ...(patch.groups || {}) },
+          quietHours: { ...previous.quietHours, ...(patch.quietHours || {}) },
+        });
+      }
+      return { previous };
+    },
+    onError: (_error, _patch, context) => {
+      if (context?.previous) client.setQueryData(["mobile", "notification-preferences"], context.previous);
+    },
+    onSettled: () => client.invalidateQueries({ queryKey: ["mobile", "notification-preferences"] }),
+  });
+}
+
+export interface PublicBanner {
+  id: string;
+  text: string;
+  imageUrl?: string;
+  tone: "gold" | "dark" | "green" | "red";
+  linkType: "category" | "product" | "market" | "none";
+  linkTarget: string;
+}
+
+export function useBannersQuery(placement: "home" | "category") {
+  return useQuery({
+    queryKey: ["mobile", "banners", placement] as const,
+    queryFn: () => apiRequest<PublicBanner[]>(`/public/banners?placement=${placement}`, { auth: false }),
+    // The admin's on/off switch also pushes a realtime refresh; this covers a missed socket.
+    staleTime: 10_000,
+    refetchInterval: 60_000,
+    placeholderData: (previous) => previous,
   });
 }
 
@@ -1137,6 +1258,7 @@ export function useCheckoutPreviewMutation() {
       logisticsProviderId?: string;
       couponCode?: string;
       useCredits?: boolean;
+      deliveryNote?: string;
     }) =>
       post<any, Record<string, unknown>>("/checkout/preview", {
         addressId: input.addressId,
@@ -1146,6 +1268,7 @@ export function useCheckoutPreviewMutation() {
         // The preview schema is .strict(), so only send what was chosen.
         ...(input.logisticsProviderId ? { logisticsProviderId: input.logisticsProviderId } : {}),
         ...(input.couponCode ? { couponCode: input.couponCode } : {}),
+        ...(input.deliveryNote ? { deliveryNote: input.deliveryNote } : {}),
         ...(input.useCredits ? { useCredits: true } : {}),
       }),
   });

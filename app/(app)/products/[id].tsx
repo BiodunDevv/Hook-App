@@ -1,10 +1,12 @@
 import { Ionicons } from "@expo/vector-icons";
+import { haptics } from "@/lib/haptics";
 import { router, useLocalSearchParams } from "expo-router";
 import { useEffect, useMemo, useRef, useState } from "react";
 import {
   AccessibilityInfo,
   Pressable,
   RefreshControl,
+  FlatList,
   ScrollView,
   Text,
   View,
@@ -22,6 +24,9 @@ import { ProductInformation } from "@/components/marketplace/ProductInformation"
 import { BottomActionBar, BottomActionButton } from "@/components/shared/BottomActionBar";
 import { HookPageLoading } from "@/components/shared/HookPageLoading";
 import { HookBackButton } from "@/components/shared/HookBackButton";
+import { ProductCardSkeleton } from "@/components/marketplace/ProductCardSkeleton";
+import { RecentlyViewed } from "@/components/marketplace/RecentlyViewed";
+import { rememberViewedProduct } from "@/lib/recently-viewed";
 import { HookSheet } from "@/components/shared/HookSheet";
 import { RemoteImage } from "@/components/shared/RemoteImage";
 import { toast } from "@/components/shared/toast";
@@ -36,21 +41,11 @@ import {
   useCustomerSessionQuery,
   useLikedProductsQuery,
   useProductQuery,
-  useProductsQuery,
+  useInfiniteProductsQuery,
   useToggleProductLikeMutation,
   type PublicCatalogProduct,
 } from "@/lib/mobile-api";
-
-type ProductVariant = PublicCatalogProduct["variants"][number];
-
-function variantColor(variant: ProductVariant) {
-  return (
-    variant.colour ||
-    variant.attributes?.color ||
-    variant.attributes?.colour ||
-    ""
-  );
-}
+import { autoSelection, availableValues, buildAxes, choose, findVariant, nextMissingAxis, valueOf, variantDetails, type Selection } from "@/lib/variant-axes";
 
 export default function ProductDetailScreen() {
   const { id, returnTo } = useLocalSearchParams<{
@@ -60,7 +55,8 @@ export default function ProductDetailScreen() {
   const insets = useSafeAreaInsets();
   const { width } = useWindowDimensions();
   const scrollRef = useRef<ScrollView>(null);
-  const optionPositions = useRef({ details: 0, colour: 0, size: 0 });
+  const heroPager = useRef<ScrollView>(null);
+  const optionPositions = useRef<Record<string, number>>({ details: 0 });
   const reducedMotion = useReducedMotion();
   const query = useProductQuery(id);
   const add = useAddCartItemMutation();
@@ -73,11 +69,10 @@ export default function ProductDetailScreen() {
   const cartAnimation = useCartAddAnimation(product?.publicId);
   const [quantity, setQuantity] = useState(1);
   const [activeImage, setActiveImage] = useState(0);
-  const [selectedColor, setSelectedColor] = useState<string>();
-  const [selectedSize, setSelectedSize] = useState<string>();
+  const [selection, setSelection] = useState<Selection>({});
   const [addedToCart, setAddedToCart] = useState(false);
   const [pendingCartAction, setPendingCartAction] = useState<'add' | 'buy' | null>(null);
-  const [cartError, setCartError] = useState<{ message: string; uncertain: boolean; buy: boolean } | null>(null);
+  const [cartError, setCartError] = useState<{ message: string; uncertain: boolean; buy: boolean; code?: string } | null>(null);
   const [sizeGuideVisible, setSizeGuideVisible] = useState(false);
   const [negotiationOptionsVisible, setNegotiationOptionsVisible] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
@@ -107,29 +102,15 @@ export default function ProductDetailScreen() {
   }
 
   const variants = useMemo(() => product?.variants || [], [product?.variants]);
-  const colorOptions = useMemo(() => {
-    const values = new Map<string, string>();
-    variants.forEach((variant) => {
-      const value = variantColor(variant);
-      if (value && !values.has(value.toLowerCase()))
-        values.set(value.toLowerCase(), value);
-    });
-    return [...values.values()];
-  }, [variants]);
-  const sizeOptions = useMemo(() => {
-    const values = new Set<string>();
-    variants.forEach((variant) => {
-      if (variant.size) values.add(variant.size);
-    });
-    return [...values];
-  }, [variants]);
-  const selectedVariant = variants.find((variant) => {
-    const colorMatches =
-      !colorOptions.length ||
-      variantColor(variant).toLowerCase() === selectedColor?.toLowerCase();
-    const sizeMatches = !sizeOptions.length || variant.size === selectedSize;
-    return colorMatches && sizeMatches;
-  });
+  // What the customer chooses comes from the product's category: size and
+  // colour for shoes, capacity and colour for a powerbank, length and texture
+  // for a wig. Axes with a single value choose themselves.
+  const axes = useMemo(() => buildAxes(variants, product?.category?.attributes), [variants, product?.category?.attributes]);
+  const activeSelection = useMemo(() => autoSelection(axes, selection), [axes, selection]);
+  const missingAxis = nextMissingAxis(axes, activeSelection);
+  const selectedVariant = axes.length
+    ? (missingAxis ? undefined : findVariant(variants, activeSelection))
+    : variants.length === 1 ? variants[0] : undefined;
   const negotiated = useActiveNegotiationQuery(
     isCustomerSession(session.data) ? product?.publicId : undefined,
     selectedVariant?.publicId,
@@ -139,32 +120,37 @@ export default function ProductDetailScreen() {
   const negotiatedPriceMinor = Number(quote?.agreedPriceMinor || 0);
   const displayPriceMinor =
     negotiatedPriceMinor || Number(product?.effectivePriceMinor || 0);
-  const relatedByMarket = useProductsQuery(
-    { marketId: product?.market?.publicId, limit: 10 },
-    Boolean(product?.market?.publicId),
-  );
-  const relatedByCategory = useProductsQuery(
-    { categoryId: product?.category?.publicId, limit: 10 },
+  // Endless "more like this": the parent category (so sibling sub-categories
+  // appear too), then a market-wide fallback. Items from the same
+  // sub-category float first within what has loaded.
+  const related = useInfiniteProductsQuery(
+    { categoryId: product?.category?.parent?.publicId || product?.category?.publicId, limit: 12 },
     Boolean(product?.category?.publicId),
   );
+  const relatedByMarket = useInfiniteProductsQuery(
+    { marketId: product?.market?.publicId, limit: 12 },
+    Boolean(product?.market?.publicId) && !product?.category?.publicId,
+  );
+  const feed = product?.category?.publicId ? related : relatedByMarket;
   const suggestions = useMemo(() => {
-    const currentId = product?.publicId;
-    const seen = new Set<string>();
-    const result: PublicCatalogProduct[] = [];
-    for (const item of relatedByMarket.data?.data || []) {
-      if (item.publicId === currentId || seen.has(item.publicId)) continue;
-      seen.add(item.publicId);
-      result.push(item);
-    }
-    if (result.length < 4) {
-      for (const item of relatedByCategory.data?.data || []) {
-        if (item.publicId === currentId || seen.has(item.publicId)) continue;
+    const seen = new Set<string>([product?.publicId || ""]);
+    const items: PublicCatalogProduct[] = [];
+    for (const page of feed.data?.pages || []) {
+      for (const item of page.data) {
+        if (seen.has(item.publicId)) continue;
         seen.add(item.publicId);
-        result.push(item);
+        items.push(item);
       }
     }
-    return result.slice(0, 8);
-  }, [relatedByMarket.data, relatedByCategory.data, product?.publicId]);
+    const leaf = product?.category?.publicId;
+    return items.sort((x, y) => Number(y.category?.publicId === leaf) - Number(x.category?.publicId === leaf));
+  }, [feed.data, product?.publicId, product?.category?.publicId]);
+  useEffect(() => {
+    if (product) void rememberViewedProduct(product);
+  }, [product]);
+  const loadMoreSuggestions = () => {
+    if (feed.hasNextPage && !feed.isFetchingNextPage) void feed.fetchNextPage();
+  };
   const images = product?.media?.length ? product.media : [{ url: "" }];
   const heroHeight = Math.min(Math.max(width * 1.1, 380), 460);
   const isLiked = Boolean(
@@ -175,9 +161,8 @@ export default function ProductDetailScreen() {
     setQuantity(1);
     setActiveImage(0);
 
-    setSelectedColor(undefined);
-    setSelectedSize(undefined);
-  }, [product?.publicId, product?.variants]);
+    setSelection({});
+  }, [product?.publicId]);
 
   useEffect(
     () => () => {
@@ -186,34 +171,32 @@ export default function ProductDetailScreen() {
     [],
   );
 
-  function chooseColor(value: string) {
-    if (selectedColor?.toLowerCase() === value.toLowerCase()) return;
-    setSelectedColor(value);
-    // A colour change creates a new choice: never carry a size across silently.
-    setSelectedSize(undefined);
+  function pick(axisKey: string, value: string) {
+    haptics.select();
+    setSelection((current) => choose(variants, axes, current, axisKey, value));
   }
 
-  function chooseSize(value: string) {
-    if (colorOptions.length && !selectedColor) return;
-    const matching = variants.some(
-      (variant) =>
-        variant.size === value &&
-        (!selectedColor ||
-          variantColor(variant).toLowerCase() === selectedColor.toLowerCase()),
+  /**
+   * The buttons stay visible before the options are chosen. Tapping one says what is left to choose and brings that
+   * option into view, instead of the buttons disappearing.
+   */
+  function promptForOptions() {
+    haptics.select();
+    const labels = axes.filter((axis) => !activeSelection[axis.key]).map((axis) => axis.label.toLowerCase());
+    toast.info(
+      missingAxis ? `Choose a ${missingAxis.label.toLowerCase()}` : "Choose your options",
+      labels.length > 1 ? `Still to choose: ${labels.join(", ")}.` : "Pick an available option above to continue.",
     );
-    if (matching) setSelectedSize(value);
+    const section = missingAxis?.key || axes[0]?.key || "details";
+    scrollRef.current?.scrollTo({ y: Math.max(0, optionPositions.current.details + (optionPositions.current[section] || 0) - insets.top - 72), animated: !reducedMotion });
   }
 
   function addToCart(redirectToCart = false) {
     if (!product || !product.isPurchasable || add.isPending || addLock.current)
       return;
     if (variants.length > 0 && !selectedVariant) {
-      const missing = [
-        colorOptions.length && !selectedColor ? "a colour" : null,
-        sizeOptions.length && !selectedSize ? "a size" : null,
-      ].filter(Boolean);
       toast.error(
-        `Choose ${missing.join(" and ") || "an option"} before adding to cart`,
+        `Choose ${missingAxis ? `a ${missingAxis.label.toLowerCase()}` : "an option"} before adding to cart`,
       );
       return;
     }
@@ -229,11 +212,7 @@ export default function ProductDetailScreen() {
       productId: product.publicId,
       variantId: selectedVariant?.publicId,
       quantity,
-      selectedVariants: {
-        color:
-          variantColor(selectedVariant || ({} as ProductVariant)) || undefined,
-        size: selectedVariant?.size,
-      },
+      selectedVariants: selectedVariant ? variantDetails(selectedVariant) : {},
       ...(quote?.id ? { quoteId: quote.id } : {}),
       optimisticProduct: product,
     };
@@ -254,7 +233,7 @@ export default function ProductDetailScreen() {
         setAddedToCart(false);
         cartAnimation.reverse();
         const uncertain = !(error instanceof ApiError) || !error.status || error.status >= 500;
-        setCartError({ uncertain, buy: redirectToCart, message: uncertain
+        setCartError({ uncertain, buy: redirectToCart, code: error instanceof ApiError ? error.code : undefined, message: uncertain
           ? 'We could not confirm the save. Check your cart before adding again.'
           : error.message || 'Could not add this item. Please try again.' });
       },
@@ -290,6 +269,7 @@ export default function ProductDetailScreen() {
   if (query.isLoading) {
     return (
       <HookPageLoading
+        variant="product"
         title="Product details"
         label="Loading product"
         onBack={goBack}
@@ -301,8 +281,13 @@ export default function ProductDetailScreen() {
     return (
       <View className="flex-1 items-center justify-center bg-[#F1F1F3] px-8">
         <Text className="text-lg font-black text-black">
-          Product unavailable
+          {query.isError ? "Couldn’t load this product" : "Product unavailable"}
         </Text>
+        {query.isError ? (
+          <Pressable onPress={() => void query.refetch()} className="mt-4 rounded-full bg-black px-6 py-3">
+            <Text className="font-bold text-white">{query.isFetching ? "Trying…" : "Try again"}</Text>
+          </Pressable>
+        ) : null}
         <Pressable
           onPress={goBack}
           className="mt-4 rounded-full bg-[#FFC809] px-6 py-3"
@@ -314,14 +299,10 @@ export default function ProductDetailScreen() {
   }
 
   const variantRequired = variants.length > 0 && !selectedVariant;
-  const selectionPrompt =
-    colorOptions.length && !selectedColor
-      ? "Select a colour to continue"
-      : sizeOptions.length && !selectedSize
-        ? "Now select your size to continue"
-        : "Select the available options to continue";
   const availableQuantity = product.availableQuantity;
   const outOfStock = availableQuantity === 0;
+  // The most a customer can add: 20, or what is actually in stock when that is fewer.
+  const maxQuantity = Math.max(1, Math.min(20, typeof availableQuantity === "number" ? availableQuantity : 20));
   const unavailable = product.isPurchasable === false || outOfStock;
   // Only nudge once stock is genuinely low — the threshold is set by admin.
   const lowStock =
@@ -357,6 +338,7 @@ export default function ProductDetailScreen() {
           style={{ height: heroHeight }}
         >
           <ScrollView
+            ref={heroPager}
             horizontal
             pagingEnabled
             showsHorizontalScrollIndicator={false}
@@ -377,14 +359,29 @@ export default function ProductDetailScreen() {
           </ScrollView>
         </View>
 
-        <View className="h-10 flex-row items-center justify-center gap-1.5">
-          {images.slice(0, 5).map((image, index) => (
-            <View
-              key={`${image.url || "dot"}-${index}`}
-              className={`h-2 rounded-full ${index === activeImage ? "w-5 bg-[#FFC809]" : "w-2 bg-[#96969B]"}`}
-            />
-          ))}
-        </View>
+        {images.length > 1 ? (
+          <ScrollView
+            horizontal
+            showsHorizontalScrollIndicator={false}
+            contentContainerStyle={{ gap: 10, paddingHorizontal: 16, paddingVertical: 14, justifyContent: "center", flexGrow: 1 }}
+          >
+            {images.slice(0, 8).map((image, index) => (
+              <Pressable
+                key={`${image.url || "thumb"}-${index}`}
+                accessibilityRole="button"
+                accessibilityLabel={`Show image ${index + 1}`}
+                accessibilityState={{ selected: index === activeImage }}
+                onPress={() => {
+                  setActiveImage(index);
+                  heroPager.current?.scrollTo({ x: index * width, animated: true });
+                }}
+                className={`h-16 w-16 overflow-hidden rounded-2xl bg-white ${index === activeImage ? "border-2 border-[#FFC809]" : "border border-black/10"}`}
+              >
+                <RemoteImage uri={image.url} contentFit="cover" />
+              </Pressable>
+            ))}
+          </ScrollView>
+        ) : <View className="h-4" />}
 
         <View className="gap-7 px-3 pb-4" onLayout={(event) => { optionPositions.current.details = event.nativeEvent.layout.y; }}>
           {unavailable && !outOfStock ? (
@@ -405,20 +402,31 @@ export default function ProductDetailScreen() {
             <View className="flex-1">
               <Text
                 numberOfLines={2}
-                className="text-[24px] font-black leading-7 text-black"
+                className="text-[26px] font-bold leading-8 text-black"
               >
                 {product.title}
               </Text>
-              <View className="mt-2 flex-row items-center gap-2">
-                <Text className="text-[20px] font-black text-[#FFC809]">
+              <View className="mt-1.5 flex-row flex-wrap items-center gap-x-2">
+                {product.category?.parent?.name ? (
+                  <Text className="text-[12px] text-black/45">{product.category.parent.name} ›</Text>
+                ) : null}
+                {product.category?.name ? <Text className="text-[12px] text-black/45">{product.category.name}</Text> : null}
+              </View>
+              {product.market?.name ? (
+                <Text className="mt-1 text-[13px] text-black/50">
+                  By <Text className="font-semibold text-[#B98A00]">{product.market.name}</Text>
+                </Text>
+              ) : null}
+              <View className="mt-3 flex-row flex-wrap items-center gap-2">
+                <Text className="text-[24px] font-black text-black">
                   ₦{(displayPriceMinor / 100).toLocaleString()}
                 </Text>
                 {negotiatedPriceMinor > 0 ? (
-                  <Text className="text-[13px] text-black/50 line-through">
+                  <Text className="text-[14px] text-black/40 line-through">
                     ₦{(product.effectivePriceMinor / 100).toLocaleString()}
                   </Text>
                 ) : product.discountMinor > 0 ? (
-                  <Text className="text-[13px] text-black/50 line-through">
+                  <Text className="text-[14px] text-black/40 line-through">
                     ₦{(product.sellingPriceMinor / 100).toLocaleString()}
                   </Text>
                 ) : null}
@@ -445,25 +453,23 @@ export default function ProductDetailScreen() {
               ) : null}
             </View>
 
-            <View className="flex-row items-center rounded-full bg-[#E2E2E2] px-1 py-1">
+            <View className="flex-row items-center gap-2.5 pt-2">
               <Pressable
                 accessibilityLabel="Decrease quantity"
                 disabled={quantity <= 1}
-                onPress={() => setQuantity((value) => Math.max(1, value - 1))}
-                className="h-7 w-7 items-center justify-center rounded-full bg-black"
+                onPress={() => { haptics.select(); setQuantity((value) => Math.max(1, value - 1)); }}
+                className="h-9 w-9 items-center justify-center rounded-full border border-black/20 bg-white disabled:opacity-35"
               >
-                <Ionicons name="remove" size={15} color="white" />
+                <Ionicons name="remove" size={17} color="#111" />
               </Pressable>
-              <Text className="w-8 text-center text-[13px] font-medium text-black">
-                {String(quantity).padStart(2, "0")}
-              </Text>
+              <Text className="w-5 text-center text-[15px] font-semibold text-black">{quantity}</Text>
               <Pressable
                 accessibilityLabel="Increase quantity"
-                disabled={quantity >= 20}
-                onPress={() => setQuantity((value) => Math.min(20, value + 1))}
-                className="h-7 w-7 items-center justify-center rounded-full bg-black"
+                disabled={quantity >= maxQuantity}
+                onPress={() => { haptics.select(); setQuantity((value) => Math.min(maxQuantity, value + 1)); }}
+                className="h-9 w-9 items-center justify-center rounded-full border-2 border-[#FFC809] bg-[#FFF8DB] disabled:opacity-35"
               >
-                <Ionicons name="add" size={15} color="white" />
+                <Ionicons name="add" size={17} color="#111" />
               </Pressable>
             </View>
           </View>
@@ -476,98 +482,67 @@ export default function ProductDetailScreen() {
 
           <ProductInformation key={product.publicId} name={product.title} description={product.description} />
 
-          {colorOptions.length ? (
-            <View onLayout={(event) => { optionPositions.current.colour = event.nativeEvent.layout.y; }}>
-              <Text className="text-sm font-semibold text-black">
-                Colour
-                    {!selectedColor ? (
-                      <Text className="text-[#C53B35]"> *</Text>
-                    ) : null}
-              </Text>
-              <View className="mt-3 flex-row flex-wrap gap-2">
-                {colorOptions.map((value) => {
-                  const selected = selectedColor?.toLowerCase() === value.toLowerCase();
-                  const displayColor = resolveColor(value);
-                  return (
+          {axes.map((axis) => {
+            const chosen = activeSelection[axis.key] || "";
+            const available = availableValues(variants, activeSelection, axis.key);
+            return (
+              <View key={axis.key} onLayout={(event) => { optionPositions.current[axis.key] = event.nativeEvent.layout.y; }}>
+                <View className="flex-row items-center justify-between">
+                  <Text className="text-[15px] font-bold text-black">
+                    {axis.label}
+                    {!chosen ? <Text className="text-[#C53B35]"> *</Text> : null}
+                  </Text>
+                  {axis.type === "size" && product.category?.sizingGuide?.summary ? (
                     <Pressable
-                      key={value}
                       accessibilityRole="button"
-                      accessibilityLabel={`Select ${displayColor.name} colour`}
-                      accessibilityState={{ selected }}
-                      onPress={() => chooseColor(value)}
-                      className={`flex-row items-center rounded-full border px-2.5 py-1.5 ${selected ? "border-black" : "border-black/25"}`}
+                      accessibilityLabel="Open size guide"
+                      onPress={() => setSizeGuideVisible(true)}
+                      className="flex-row items-center gap-1"
                     >
-                      <View className="h-5 w-5 rounded-full border border-black/10" style={{ backgroundColor: displayColor.hex }} />
-                      <Text className="ml-1.5 text-[13px] text-black">{displayColor.name}</Text>
+                      <Ionicons name="information-circle-outline" size={16} color="#555" />
+                      <Text className="text-xs font-semibold text-black/60">Size guide</Text>
                     </Pressable>
-                  );
-                })}
-              </View>
-            </View>
-          ) : null}
-
-          {sizeOptions.length ? (
-            <View onLayout={(event) => { optionPositions.current.size = event.nativeEvent.layout.y; }}>
-                  <View className="flex-row items-center justify-between">
-                <Text className="text-sm font-semibold text-black">
-                  Size
-                      {!selectedSize ? (
-                        <Text className="text-[#C53B35]"> *</Text>
-                      ) : null}
-                    </Text>
-                    {product.category?.sizingGuide?.summary ? (
-                      <Pressable
-                        accessibilityRole="button"
-                        accessibilityLabel="Open size guide"
-                        onPress={() => setSizeGuideVisible(true)}
-                        className="flex-row items-center gap-1"
-                      >
-                        <Ionicons
-                          name="information-circle-outline"
-                          size={16}
-                          color="#555"
-                        />
-                        <Text className="text-xs font-semibold text-black/60">
-                          Size guide
-                        </Text>
-                      </Pressable>
-                    ) : null}
-                  </View>
-              <View className="mt-3 flex-row flex-wrap gap-2">
-                    {sizeOptions.map((size) => {
-                      const enabled =
-                        !colorOptions.length ||
-                        Boolean(
-                          selectedColor &&
-                          variants.some(
-                            (variant) =>
-                              variant.size === size &&
-                              variantColor(variant).toLowerCase() ===
-                                selectedColor.toLowerCase(),
-                          ),
-                        );
-                      const selected = selectedSize === size;
+                  ) : null}
+                </View>
+                <View className="mt-3 flex-row flex-wrap gap-2">
+                  {axis.values.map((value) => {
+                    const selected = chosen.toLowerCase() === value.toLowerCase();
+                    const enabled = available.has(value.toLowerCase());
+                    if (axis.type === "colour") {
+                      const displayColor = resolveColor(value);
                       return (
                         <Pressable
-                          key={size}
+                          key={value}
                           accessibilityRole="button"
-                          accessibilityLabel={`Select size ${size}`}
+                          accessibilityLabel={`Select ${displayColor.name} colour`}
                           accessibilityState={{ selected, disabled: !enabled }}
                           disabled={!enabled}
-                          onPress={() => chooseSize(size)}
-                          className={`min-w-11 items-center rounded-lg border px-3.5 py-2.5 ${selected ? "border-black bg-black" : enabled ? "border-black/20 bg-white" : "border-black/5 bg-black/[0.03] opacity-40"}`}
+                          onPress={() => pick(axis.key, value)}
+                          className={`flex-row items-center rounded-full border px-2.5 py-1.5 ${selected ? "border-[#FFC809] bg-[#FFF8DB]" : "border-black/15 bg-white"} ${enabled ? "" : "opacity-40"}`}
                         >
-                          <Text
-                            className={`text-[14px] font-semibold ${selected ? "text-white" : "text-black"}`}
-                          >
-                            {size}
-                          </Text>
+                          <View className="h-5 w-5 rounded-full border border-black/10" style={{ backgroundColor: displayColor.hex }} />
+                          <Text className="ml-1.5 text-[13px] text-black">{displayColor.name}</Text>
                         </Pressable>
                       );
-                    })}
-                  </View>
+                    }
+                    return (
+                      <Pressable
+                        key={value}
+                        accessibilityRole="button"
+                        accessibilityLabel={`Select ${axis.label.toLowerCase()} ${value}`}
+                        accessibilityState={{ selected, disabled: !enabled }}
+                        disabled={!enabled}
+                        onPress={() => pick(axis.key, value)}
+                        className={`min-w-11 items-center rounded-lg border px-3.5 py-2.5 ${selected ? "border-[#FFC809] bg-[#FFF8DB]" : enabled ? "border-black/15 bg-white" : "border-black/5 bg-black/[0.03] opacity-40"}`}
+                      >
+                        <Text className={`text-[14px] ${selected ? "font-bold text-black" : "font-medium text-black/70"}`}>{value}</Text>
+                      </Pressable>
+                    );
+                  })}
                 </View>
-          ) : null}
+              </View>
+            );
+          })}
 
           <Text className="text-xs text-black/55">
             {unavailable
@@ -583,23 +558,25 @@ export default function ProductDetailScreen() {
             <Text className="px-3 text-base font-medium text-black">
               You might also like
             </Text>
-            <ScrollView
+            <FlatList
               horizontal
+              data={suggestions}
+              keyExtractor={(item) => item.publicId}
               showsHorizontalScrollIndicator={false}
-              contentContainerStyle={{
-                gap: 12,
-                paddingHorizontal: 12,
-                paddingTop: 12,
-              }}
-            >
-              {suggestions.map((item) => (
-                <View key={item.publicId} style={{ width: 150 }}>
+              nestedScrollEnabled
+              onEndReached={loadMoreSuggestions}
+              onEndReachedThreshold={0.6}
+              contentContainerStyle={{ gap: 12, paddingHorizontal: 12, paddingTop: 12 }}
+              renderItem={({ item }) => (
+                <View style={{ width: 150 }}>
                   <CatalogProductCard product={item} variant="figma" />
                 </View>
-              ))}
-            </ScrollView>
+              )}
+              ListFooterComponent={feed.isFetchingNextPage ? <View style={{ width: 150 }}><ProductCardSkeleton /></View> : null}
+            />
           </View>
         ) : null}
+        <RecentlyViewed excludeId={product?.publicId} />
       </ScrollView>
       <View
         className="absolute inset-x-0 z-50 flex-row items-center justify-between px-4"
@@ -633,23 +610,7 @@ export default function ProductDetailScreen() {
         </View>
       </View>
 
-      {variantRequired && !unavailable ? (
-        <View
-          className="absolute inset-x-0 bottom-0 items-center px-4 pt-2"
-          style={{ paddingBottom: Math.max(insets.bottom, 8) }}
-        >
-          <Pressable accessibilityRole="button" accessibilityLabel={selectionPrompt} accessibilityHint="Scrolls to the required product options" accessibilityLiveRegion="polite"
-            onPress={() => {
-              const section = colorOptions.length && !selectedColor ? 'colour' : sizeOptions.length && !selectedSize ? 'size' : colorOptions.length ? 'colour' : 'size';
-              scrollRef.current?.scrollTo({ y: Math.max(0, optionPositions.current.details + optionPositions.current[section] - insets.top - 72), animated: !reducedMotion });
-            }}
-            className="min-h-11 max-w-full flex-row items-center gap-2 rounded-2xl border border-[#E3C458] bg-[#FFF4CC] px-4 py-3 active:opacity-80">
-            <Ionicons name={colorOptions.length && !selectedColor ? 'color-palette-outline' : 'resize-outline'} size={19} color="#614A00" />
-            <Text className="flex-shrink text-center text-[14px] font-bold leading-5 text-[#4D3A00]">{selectionPrompt}</Text>
-            <Ionicons name="chevron-down" size={16} color="#614A00" />
-          </Pressable>
-        </View>
-      ) : (
+      {(
         <BottomActionBar>
           <View ref={cartAnimation.triggerRef} collapsable={false} style={{ flex: 1, height: designTokens.control.actionHeight }}>
             <BottomActionButton
@@ -657,7 +618,7 @@ export default function ProductDetailScreen() {
               icon={addedToCart ? "checkmark-circle" : undefined}
               disabled={unavailable || pendingCartAction !== null}
               busy={pendingCartAction === 'add'}
-              onPress={() => void addToCart(false)}
+              onPress={() => (variantRequired ? promptForOptions() : void addToCart(false))}
               tone="secondary"
             />
           </View>
@@ -665,7 +626,7 @@ export default function ProductDetailScreen() {
             label={unavailable ? "Check back soon" : "Buy now"}
             disabled={unavailable || pendingCartAction !== null}
             loading={pendingCartAction === 'buy'}
-            onPress={() => void addToCart(true)}
+            onPress={() => (variantRequired ? promptForOptions() : void addToCart(true))}
             flex={1.2}
           />
         </BottomActionBar>
@@ -673,8 +634,21 @@ export default function ProductDetailScreen() {
       {cartError ? (
         <View accessibilityLiveRegion="polite" className="absolute inset-x-4 rounded-2xl border border-[#E7C3BD] bg-[#FFF0ED] px-4 py-3" style={{ bottom: Math.max(insets.bottom, 8) + designTokens.control.actionHeight + 16 }}>
           <Text className="text-[13px] leading-5 text-[#7D2C20]">{cartError.message}</Text>
-          <Pressable accessibilityRole="button" className="mt-1 min-h-11 justify-center" onPress={() => cartError.uncertain ? router.push('/(app)/cart' as never) : addToCart(cartError.buy)}>
-            <Text className="text-[13px] font-bold text-[#7D2C20]">{cartError.uncertain ? 'Check cart' : 'Try again'}</Text>
+          <Pressable
+            accessibilityRole="button"
+            className="mt-1 min-h-11 justify-center"
+            onPress={() => {
+              if (cartError.uncertain) return router.push('/(app)/cart' as never);
+              // An expired agreed price will keep failing if we resend it: reload the negotiation, then let them add again.
+              if (cartError.code === 'NEGOTIATION_QUOTE_EXPIRED') {
+                setCartError(null);
+                void negotiated.refetch();
+                return toast.info('Your negotiated price expired', 'The current price is shown. Add to cart again, or negotiate a new price.');
+              }
+              addToCart(cartError.buy);
+            }}
+          >
+            <Text className="text-[13px] font-bold text-[#7D2C20]">{cartError.uncertain ? 'Check cart' : cartError.code === 'NEGOTIATION_QUOTE_EXPIRED' ? 'Refresh price' : 'Try again'}</Text>
           </Pressable>
         </View>
       ) : null}
@@ -684,8 +658,8 @@ export default function ProductDetailScreen() {
         visible product={product} quantity={quantity} initialVariantId={selectedVariant?.publicId}
         onClose={() => setNegotiationOptionsVisible(false)}
         onContinue={(variant) => {
-          if (!variant.publicId) return;
-          setSelectedColor(variantColor(variant)); setSelectedSize(variant.size);
+          if (!variant.publicId) return toast.info('Choose an option first', 'Pick the exact option you want to negotiate on.');
+          setSelection(Object.fromEntries(axes.map((axis) => [axis.key, valueOf(variant, axis.key)]).filter(([, value]) => value)) as Selection);
           setNegotiationOptionsVisible(false);
           const destination = `/negotiations/new?productId=${encodeURIComponent(product.publicId)}&variantId=${encodeURIComponent(variant.publicId)}&quantity=${quantity}` as never;
           if (!isCustomerSession(session.data)) return openAuth(destination);

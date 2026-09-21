@@ -21,6 +21,8 @@ export function OrderTotals({
   couponCode,
   deliveryFeeMinor,
   totalMinor,
+  podSurchargeMinor = 0,
+  payNowMinor,
 }: {
   itemCount: number;
   subtotalMinor: number;
@@ -29,6 +31,10 @@ export function OrderTotals({
   couponCode?: string;
   deliveryFeeMinor: number;
   totalMinor: number;
+  /** Pay on Delivery: the extra charge collected with the delivery fee. */
+  podSurchargeMinor?: number;
+  /** Pay on Delivery: what is paid online now. The rest is paid at the door. */
+  payNowMinor?: number;
 }) {
   return (
     <View style={{ gap: 12 }}>
@@ -42,10 +48,17 @@ export function OrderTotals({
           <Line label="Hook credit" value={`-${naira(creditsAppliedMinor)}`} />
         ) : null}
         <Line label="Delivery fee" value={deliveryFeeMinor > 0 ? naira(deliveryFeeMinor) : "—"} />
+        {podSurchargeMinor > 0 ? <Line label="Pay on delivery charge" value={naira(podSurchargeMinor)} /> : null}
         <View style={{ marginTop: 4, flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: 12, borderRadius: 16, backgroundColor: "#FFDD66", padding: 16 }}>
           <Text className="text-xl font-bold leading-6 text-black">Total</Text>
           <Text className="text-base font-bold leading-6 text-[#111]">{naira(totalMinor)}</Text>
         </View>
+        {payNowMinor !== undefined ? (
+          <View style={{ gap: 8, borderRadius: 16, backgroundColor: "white", padding: 16 }}>
+            <Line label="Pay now (online)" value={naira(payNowMinor)} muted={false} />
+            <Line label="Pay on delivery" value={naira(Math.max(0, totalMinor - payNowMinor))} muted={false} />
+          </View>
+        ) : null}
       </View>
     </View>
   );

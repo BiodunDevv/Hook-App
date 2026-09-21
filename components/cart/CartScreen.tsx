@@ -26,6 +26,7 @@ import { resolveColor } from "@/components/marketplace/product-colors";
 import { useAuthSheet } from "@/components/auth/AuthSheetProvider";
 import {
   useCartQuery,
+  useMinimumCheckoutMinor,
   useCartMarketProductsQuery,
   useClearCartMutation,
   getCartItems,
@@ -70,6 +71,7 @@ export function CartScreen({
   } | null>(null);
   const [refreshing, setRefreshing] = useState(false);
   const data = cart.data as any;
+  const minimumMinor = useMinimumCheckoutMinor();
   const marketProducts = useCartMarketProductsQuery(data);
 
   async function refreshCart() {
@@ -201,6 +203,10 @@ export function CartScreen({
     router.push("/(tabs)/discover" as never);
   }
   function checkout() {
+    if (belowMinimum) {
+      toast.info("Add a little more to check out", `Orders start at ₦${(minimumMinor / 100).toLocaleString("en-NG")}. Your cart stays saved.`);
+      return;
+    }
     if (getCartItems(data).some((item) => item.checkoutEligible === false)) {
       toast.info(
         "Some products need confirmation",
@@ -216,8 +222,9 @@ export function CartScreen({
   }
 
   if (cart.isLoading || syncingCommerce)
-    return <HookPageLoading title="Your cart" label="Loading your cart" />;
-  if (cart.isError) return <CartError retry={() => cart.refetch()} />;
+    return <HookPageLoading variant="cart" title="Your cart" label="Loading your cart" />;
+  // A failed background refresh must not replace a cart we already have; only show the error when there is nothing to show.
+  if (cart.isError && !cart.data) return <CartError retry={() => cart.refetch()} />;
   const items = getCartItems(data);
   const checkoutBlocked = items.some((item) => item.checkoutEligible === false);
   if (!items.length) return <View ref={removalAnimation.containerRef} collapsable={false} style={{ flex: 1 }}><EmptyCart showBackButton={showBackButton} />{remove.isPending || clear.isPending ? <View accessibilityLiveRegion="polite" className="absolute inset-x-4 bottom-10 items-center"><Text className="rounded-full bg-[#FFF4CC] px-4 py-2 text-sm font-semibold text-[#4D3A00]">Updating cart…</Text></View> : null}{removalAnimation.overlay}</View>;
@@ -244,6 +251,8 @@ export function CartScreen({
   }
   const marketGroups = [...marketMap.values()];
   const subtotalMinor = visibleSubtotal(items);
+  const shortfallMinor = Math.max(0, minimumMinor - subtotalMinor);
+  const belowMinimum = minimumMinor > 0 && shortfallMinor > 0;
   const unitCount = items.reduce((sum, item) => sum + visibleQuantity(item), 0);
   const cartBusy =
     Object.keys(pendingQuantities).length > 0 ||
@@ -342,6 +351,19 @@ export function CartScreen({
               strong
             />
           </View>
+          {belowMinimum ? (
+            <View accessibilityRole="alert" className="rounded-xl bg-[#FFF4CC] p-3">
+              <Text className="text-xs font-semibold text-[#4D3A00]">
+                Orders start at ₦{(minimumMinor / 100).toLocaleString("en-NG")}
+              </Text>
+              <Text className="mt-1 text-xs leading-5 text-[#4D3A00]/80">
+                Add ₦{(shortfallMinor / 100).toLocaleString("en-NG")} more to check out. Your cart stays saved until you are ready.
+              </Text>
+              <View className="mt-2 h-1.5 overflow-hidden rounded-full bg-[#FFC809]/30">
+                <View className="h-full rounded-full bg-[#FFC809]" style={{ width: `${Math.min(100, Math.round((subtotalMinor / minimumMinor) * 100))}%` }} />
+              </View>
+            </View>
+          ) : null}
           {checkoutBlocked ? (
             <Text
               accessibilityRole="alert"
@@ -376,8 +398,8 @@ export function CartScreen({
       </ScrollView>
       <BottomActionBar>
         <BottomActionButton
-          label={cartBusy ? "Updating cart…" : "Proceed to Checkout"}
-          disabled={checkoutBlocked || cartBusy}
+          label={cartBusy ? "Updating cart…" : belowMinimum ? `Add ₦${(shortfallMinor / 100).toLocaleString("en-NG")} more to check out` : "Proceed to Checkout"}
+          disabled={checkoutBlocked || cartBusy || belowMinimum}
           onPress={checkout}
         />
       </BottomActionBar>
@@ -436,6 +458,11 @@ function CartRow({
   const displayColor = selectedColorValue
     ? resolveColor(selectedColorValue)
     : undefined;
+  // Size and anything else the category asks for (capacity, length, connector...).
+  const otherDetails = Object.entries(item.selectedVariants || {})
+    .filter(([key, value]) => key !== "color" && key !== "colour" && Boolean(value))
+    .sort(([a], [b]) => (a === "size" ? -1 : b === "size" ? 1 : a.localeCompare(b)))
+    .map(([, value]) => String(value));
   const lineTotalMinor = Number(item.unitPriceMinor || 0) * quantity;
   const productId = product?.publicId || product?.id || item.productId;
 
@@ -491,9 +518,7 @@ function CartRow({
             <Ionicons name="trash" size={21} color="#FF2525" />
           </Pressable>
         </View>
-        {item.selectedVariants?.color ||
-        item.selectedVariants?.colour ||
-        item.selectedVariants?.size ? (
+        {displayColor || otherDetails.length ? (
           <View className="mt-2 flex-row items-center gap-2">
             {displayColor ? (
               <View
@@ -502,7 +527,7 @@ function CartRow({
               />
             ) : null}
             <Text numberOfLines={1} className="flex-1 text-xs text-[#777]">
-              {[displayColor?.name, item.selectedVariants?.size]
+              {[displayColor?.name, ...otherDetails]
                 .filter(Boolean)
                 .join(" · ")}
             </Text>

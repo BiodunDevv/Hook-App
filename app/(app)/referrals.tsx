@@ -1,4 +1,5 @@
 import { Ionicons } from "@expo/vector-icons";
+import { SkeletonRows } from "@/components/motion/Skeleton";
 import * as Clipboard from "expo-clipboard";
 import { useState } from "react";
 import { Pressable, RefreshControl, ScrollView, Share, Text, View } from "react-native";
@@ -86,8 +87,8 @@ export default function ReferralsScreen() {
         </View>
 
         {referrals.isLoading ? (
-          <View className="py-16">
-            <HookLoader />
+          <View className="pt-4 -mx-4">
+            <SkeletonRows count={3} label="Loading referrals" />
           </View>
         ) : referrals.isError ? (
           <Pressable accessibilityRole="button" onPress={() => void refresh()} style={{ padding: 24, marginTop: 20, borderRadius: 22, backgroundColor: "white" }}>

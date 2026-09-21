@@ -1,4 +1,5 @@
 import { Ionicons } from "@expo/vector-icons";
+import { SkeletonRows } from "@/components/motion/Skeleton";
 import { Image } from "expo-image";
 import { Pressable, Text, View } from "react-native";
 import { BottomSheetScrollView as ScrollView } from "@gorhom/bottom-sheet";
@@ -31,8 +32,8 @@ export function LogisticsSheet({
   return (
     <CheckoutSheet visible={visible} onClose={onClose} title="Choose logistics">
       {loading ? (
-        <View style={{ padding: 32, alignItems: "center" }} accessibilityLiveRegion="polite">
-          <HookLoader label="Loading delivery options…" />
+        <View style={{ marginHorizontal: -16 }} accessibilityLiveRegion="polite">
+          <SkeletonRows count={3} label="Loading delivery options" />
         </View>
       ) : error ? (
         <View style={{ padding: 24, alignItems: "center", gap: 16 }}>

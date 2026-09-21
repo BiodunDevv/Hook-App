@@ -1,7 +1,7 @@
 import { Ionicons } from "@expo/vector-icons";
 import { LinearGradient } from "expo-linear-gradient";
 import { router, useLocalSearchParams } from "expo-router";
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import {
   Pressable,
   RefreshControl,
@@ -19,7 +19,6 @@ import Animated, {
   useSharedValue,
 } from "react-native-reanimated";
 
-import { HookLoader } from "@/components/shared/HookLoader";
 import { HookPageLoading } from "@/components/shared/HookPageLoading";
 import { HookBackButton } from "@/components/shared/HookBackButton";
 import { HookRefreshIndicator } from "@/components/shared/HookRefreshIndicator";
@@ -33,7 +32,11 @@ import {
 } from "@/lib/mobile-api";
 
 import { CatalogProductCard } from "./CatalogProductCard";
+import { rememberSearch } from "@/lib/recent-searches";
+import { useDebouncedValue } from "@/lib/use-debounced";
+import { BannerCarousel } from "./BannerCarousel";
 import { CategoryCircle } from "./CategoryCircle";
+import { SKELETON_ITEMS, SkeletonProductCard, isSkeletonItem, type SkeletonItem } from "@/components/motion/Skeleton";
 import { HookYellowPattern } from "./HookYellowPattern";
 import { MarketSelectionSheet } from "./MarketSelectionSheet";
 import { MarketplaceCompactHeader } from "./MarketplaceCompactHeader";
@@ -41,9 +44,8 @@ import { MarketplaceSearch } from "./MarketplaceSearch";
 import { ProductLayoutToggle, type ProductLayout } from "./ProductLayoutToggle";
 import { ScallopedEdge } from "./ScallopedEdge";
 
-const HERO_HEIGHT = 326;
-const CATEGORY_OVERLAP = 34;
-const SEARCH_TOP = HERO_HEIGHT - 74;
+const HERO_BODY = 168; // photo height below the status bar
+const HERO_OVERLAP = 24;
 
 export function MarketStorefrontScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
@@ -52,7 +54,13 @@ export function MarketStorefrontScreen() {
   const market = useMarketQuery(marketId);
   const categories = useMarketCategoriesQuery(marketId);
   const markets = useMarketsQuery();
-  const [categoryId, setCategoryId] = useState("all");
+  const [categoryId, setCategoryIdState] = useState("all");
+  const [transitioning, setTransitioning] = useState(false);
+  const setCategoryId = (next: string) => {
+    setTransitioning(true);
+    setTimeout(() => setTransitioning(false), 500);
+    setCategoryIdState(next);
+  };
   const [search, setSearch] = useState("");
   const [layout, setLayout] = useState<ProductLayout>("grid");
   const [refreshing, setRefreshing] = useState(false);
@@ -64,13 +72,26 @@ export function MarketStorefrontScreen() {
   const headerVisibleValue = useSharedValue(false);
   const searchPinnedValue = useSharedValue(false);
   const compactHeaderHeight = insets.top + 62;
-  const compactHeaderThreshold = HERO_HEIGHT - compactHeaderHeight;
+  const heroHeight = insets.top + HERO_BODY;
+  const compactHeaderThreshold = heroHeight - compactHeaderHeight;
+  const debouncedSearch = useDebouncedValue(search.trim(), 300);
+  const searching = search.trim() !== debouncedSearch;
   const products = useProductsQuery({
     marketId,
     ...(categoryId !== "all" ? { categoryId } : {}),
-    ...(search.trim() ? { q: search.trim() } : {}),
+    ...(debouncedSearch ? { q: debouncedSearch } : {}),
     limit: 50,
   });
+
+  // Items with a deal or open to negotiation surface first as "Popular here".
+  const popular = useMemo(
+    () =>
+      [...(products.data?.data || [])]
+        .filter((item) => item.isPurchasable !== false)
+        .sort((a, b) => Number(b.discountMinor > 0) + Number(b.negotiationAvailable) - (Number(a.discountMinor > 0) + Number(a.negotiationAvailable)))
+        .slice(0, 8),
+    [products.data],
+  );
 
   function selectMarket(nextMarketId: string) {
     setMarketSheetVisible(false);
@@ -188,7 +209,7 @@ export function MarketStorefrontScreen() {
   });
 
   if (market.isLoading) {
-    return <HookPageLoading label="Opening market" />;
+    return <HookPageLoading variant="storefront" showBack={false} label="Opening market" />;
   }
 
   if (!market.data) {
@@ -211,118 +232,92 @@ export function MarketStorefrontScreen() {
     item.shortDisplayName || marketName.trim().split(/\s+/)[0] || marketName;
   const listHeader = (
     <View className="relative">
-      <View className="relative" style={{ height: HERO_HEIGHT, zIndex: 20 }}>
-        <View className="relative h-full overflow-hidden">
-          <RemoteImage uri={item.imageUrl} />
-          <LinearGradient
-            colors={["rgba(0,0,0,.55)", "rgba(0,0,0,.04)", "rgba(0,0,0,.72)"]}
-            className="absolute inset-0"
-          />
-          <View
-            className="absolute left-5 right-5"
-            style={{ top: insets.top + 8 }}
+      <View className="relative overflow-hidden" style={{ height: heroHeight }}>
+        <RemoteImage uri={item.imageUrl} />
+        <LinearGradient colors={["rgba(0,0,0,.55)", "rgba(0,0,0,.05)", "rgba(0,0,0,.7)"]} className="absolute inset-0" />
+        <View className="absolute left-5 right-5 flex-row items-center gap-3" style={{ top: insets.top + 8 }}>
+          <HookBackButton />
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel={`Choose market, currently ${marketName}`}
+            onPress={() => setMarketSheetVisible(true)}
+            className="max-w-[220px]"
           >
-            <HookBackButton />
-            <Pressable
-              accessibilityRole="button"
-              accessibilityLabel={`Choose market, currently ${marketName}`}
-              onPress={() => setMarketSheetVisible(true)}
-              className="mt-3 max-w-[220px]"
-            >
-              <Text className="text-[10px] font-semibold text-white/80">
-                Choose Market
-              </Text>
-              <View className="mt-0.5 flex-row items-center">
-                <Text
-                  numberOfLines={1}
-                  adjustsFontSizeToFit
-                  minimumFontScale={0.72}
-                  className="max-w-[200px] text-[14px] font-bold leading-5 text-white"
-                >
-                  {marketName}
-                </Text>
-                <Ionicons
-                  name="chevron-down"
-                  size={16}
-                  color="#fff"
-                />
-              </View>
-            </Pressable>
-          </View>
-          <Text
-            numberOfLines={1}
-            minimumFontScale={0.72}
-            className="absolute left-5 right-5 z-10 text-[34px] font-black text-white"
-            style={{ top: SEARCH_TOP - 50, lineHeight: 44 }}
-          >
-            {marketDisplayName}
-          </Text>
+            <Text className="text-[10px] font-semibold text-white/80">Choose Market</Text>
+            <View className="flex-row items-center">
+              <Text numberOfLines={1} className="max-w-[190px] text-[14px] font-bold leading-5 text-white">{marketName}</Text>
+              <Ionicons name="chevron-down" size={16} color="#fff" />
+            </View>
+          </Pressable>
         </View>
+        <Text
+          numberOfLines={1}
+          className="absolute bottom-10 left-5 right-5 font-black text-white"
+          style={{ fontSize: 32, lineHeight: 40, includeFontPadding: false }}
+        >
+          {marketDisplayName}
+        </Text>
       </View>
 
-      <View
-        className="relative z-30 overflow-visible rounded-t-[28px] bg-[#FFD846] px-3 pb-5 pt-10"
-        style={{ marginTop: -CATEGORY_OVERLAP }}
-      >
+      <View className="relative z-10 overflow-hidden rounded-t-[28px] rounded-b-[28px] bg-[#FFD846] px-4 pb-4 pt-4" style={{ marginTop: -HERO_OVERLAP }}>
         <HookYellowPattern opacity={0.72} />
+        <Animated.View
+          className="relative z-20"
+          onLayout={(event) => {
+            searchAnchorY.value = heroHeight - HERO_OVERLAP + event.nativeEvent.layout.y;
+          }}
+          style={originalSearchStyle}
+        >
+          <MarketplaceSearch
+            value={search}
+            onChangeText={setSearch}
+            onClear={() => setSearch("")}
+            onSubmitEditing={() => void rememberSearch(search)}
+            autoCorrect={false}
+            placeholder={`Search ${marketDisplayName}`}
+            iconPosition="right"
+            returnKeyType="search"
+          />
+        </Animated.View>
         <ScrollView
           horizontal
           showsHorizontalScrollIndicator={false}
-          className="relative z-10"
-          contentContainerStyle={{ gap: 4, paddingHorizontal: 1 }}
+          className="relative z-10 -mx-4 mt-2"
+          contentContainerStyle={{ gap: 4, paddingHorizontal: 12 }}
         >
-          <CategoryCircle
-            category={{ publicId: "all", name: "All", slug: "all" }}
-            selected={categoryId === "all"}
-            compact
-            onPress={() => setCategoryId("all")}
-          />
-          {(categories.data || []).map((category) => (
-            <CategoryCircle
-              key={category.publicId}
-              category={category}
-              selected={categoryId === category.publicId}
-              compact
-              onPress={() => setCategoryId(category.publicId)}
-            />
+          <CategoryCircle category={{ publicId: "all", name: "All", slug: "all" }} selected={categoryId === "all"} compact onPress={() => setCategoryId("all")} />
+          {(categories.data || []).map((category, index) => (
+            <CategoryCircle key={category.publicId} category={category} index={index} selected={categoryId === category.publicId} compact onPress={() => setCategoryId(category.publicId)} />
           ))}
         </ScrollView>
-        <ScallopedEdge color="#FFD846" count={14} size={30} />
+        {categoryId === "all" && !search.trim() ? <BannerCarousel placement="category" className="-mx-4 mt-1" /> : null}
       </View>
 
-      <Animated.View
-        className="absolute inset-x-4 z-50"
-        onLayout={(event) => {
-          searchAnchorY.value = event.nativeEvent.layout.y;
-        }}
-        style={[{ top: SEARCH_TOP }, originalSearchStyle]}
-      >
-        <MarketplaceSearch
-          value={search}
-          onChangeText={setSearch}
-          placeholder="What are you looking for"
-          iconPosition="right"
-          returnKeyType="search"
-        />
-      </Animated.View>
-
-      <View className="px-4 pt-6">
-        <View className="mb-4 mt-5 flex-row items-center justify-between">
-          <Text className="text-base font-bold">Explore</Text>
-          <ProductLayoutToggle value={layout} onChange={setLayout} />
+      {categoryId === "all" && !search.trim() && popular.length ? (
+        <View className="mt-5">
+          <Text className="px-4 text-base font-bold text-black">Popular here</Text>
+          <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 12, paddingHorizontal: 16, paddingTop: 10 }}>
+            {popular.map((entry) => (
+              <View key={entry.publicId} style={{ width: 150 }}>
+                <CatalogProductCard product={entry} variant="figma" />
+              </View>
+            ))}
+          </ScrollView>
         </View>
-        {products.isLoading ? (
-          <HookLoader label="Loading market products" />
-        ) : null}
+      ) : null}
+
+      <View className="mb-3 mt-5 flex-row items-center justify-between px-4">
+        <Text className="text-base font-bold">Explore</Text>
+        <ProductLayoutToggle value={layout} onChange={setLayout} />
       </View>
     </View>
   );
 
   return (
     <View className="flex-1 bg-[#F1F1F3]">
-      <Animated.FlatList<PublicCatalogProduct>
+      <Animated.FlatList<PublicCatalogProduct | SkeletonItem>
         key={layout}
-        data={products.data?.data || []}
+        data={products.isLoading || products.isPlaceholderData || transitioning || searching ? SKELETON_ITEMS : products.data?.data || []}
         contentInsetAdjustmentBehavior="never"
         keyboardDismissMode="on-drag"
         keyboardShouldPersistTaps="handled"
@@ -350,15 +345,15 @@ export function MarketStorefrontScreen() {
             className={layout === "list" ? "px-4" : ""}
             style={layout === "grid" ? { flexGrow: 1, flexBasis: 0, maxWidth: "48.5%" } : { width: "100%" }}
           >
-            <CatalogProductCard product={product} displayMode={layout} />
+            {isSkeletonItem(product) ? <SkeletonProductCard /> : <CatalogProductCard product={product} displayMode={layout} />}
           </View>
         )}
         ListEmptyComponent={
-          !products.isLoading ? (
+          !products.isLoading && !products.isPlaceholderData && !transitioning && !searching ? (
             <View className="mt-20 items-center px-8">
-              <Text className="font-bold">No products found</Text>
+              <Text className="font-bold">{debouncedSearch ? `No results for "${debouncedSearch}"` : "No products found"}</Text>
               <Text className="mt-1 text-center text-sm text-[#777]">
-                Try another category or search.
+                {debouncedSearch ? `Nothing in ${marketDisplayName} matches that. Check the spelling or try a shorter word.` : "Try another category."}
               </Text>
             </View>
           ) : null

@@ -108,6 +108,9 @@ function AnimatedTabItem({
         </View>
         <Text
           allowFontScaling={false}
+          numberOfLines={1}
+          adjustsFontSizeToFit
+          minimumFontScale={0.75}
           style={[styles.tabLabel, { color: selected ? "#111" : "#B2B2B5" }]}
         >
           {item.label}
@@ -142,7 +145,7 @@ export function HookTabBar({
   const cartSelected = activeRoute?.name === "cart";
   const [width, setWidth] = useState(0);
   const slot = width && mainRoutes.length ? width / mainRoutes.length : 0;
-  const activeWidth = Math.max(66, Math.min(slot - 5, 94));
+  const activeWidth = Math.max(52, Math.min(slot - 5, 94));
   const activeOffset = useSharedValue(0);
 
   useEffect(() => {
@@ -253,11 +256,14 @@ const styles = StyleSheet.create({
   navigation: { height: HOOK_TAB_BAR_HEIGHT },
   tabSlot: {
     minWidth: 0,
+    overflow: "visible",
   },
   tabContent: {
     alignItems: "center",
     justifyContent: "center",
-    width: 76,
+    // Fill the slot instead of a fixed width, so a narrow Android screen shrinks the tab rather than clipping its name.
+    alignSelf: "stretch",
+    paddingHorizontal: 2,
   },
   tabLabel: {
     fontFamily: "NunitoSans-SemiBold",
@@ -266,7 +272,7 @@ const styles = StyleSheet.create({
     marginTop: 2,
     textAlign: "center",
     includeFontPadding: false,
-    flexShrink: 0,
+    alignSelf: "stretch",
   },
   cartButton: {
     width: HOOK_TAB_BAR_HEIGHT,

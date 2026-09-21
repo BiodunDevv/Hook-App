@@ -1,3 +1,4 @@
+import { NetworkBanner } from "@/components/shared/NetworkBanner";
 import { DefaultTheme, Stack, ThemeProvider, usePathname } from "expo-router";
 import * as Linking from "expo-linking";
 import * as WebBrowser from "expo-web-browser";
@@ -163,7 +164,7 @@ export default function RootLayout() {
                       than following the device — otherwise native chrome
                       like the iOS tab bar flips appearance between screens. */}
                   <ThemeProvider value={DefaultTheme}>
-            <Stack screenOptions={{ headerShown: false }}>
+            <Stack screenOptions={{ headerShown: false, animation: "slide_from_right", animationDuration: 260 }}>
               <Stack.Screen
                 name="splash"
                 options={{
@@ -239,6 +240,7 @@ export default function RootLayout() {
               <Stack.Screen name="(app)/profile/edit" options={{ headerShown: false }} />
               <Stack.Screen name="(app)/profile/security" options={{ headerShown: false }} />
               <Stack.Screen name="(app)/profile/devices" options={{ headerShown: false }} />
+              <Stack.Screen name="(app)/profile/notifications" options={{ headerShown: false }} />
               <Stack.Screen name="(app)/profile/delete-account" options={{ headerShown: false }} />
               <Stack.Screen
                 name="(app)/states"
@@ -317,6 +319,7 @@ export default function RootLayout() {
                 }}
               />
             </Stack>
+            <NetworkBanner />
             <StatusBar animated style={isMarketHero ? "light" : "dark"} />
             <ToastProvider />
                   </ThemeProvider>

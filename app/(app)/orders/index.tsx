@@ -1,4 +1,5 @@
 import { Ionicons } from "@expo/vector-icons";
+import { Reveal } from "@/components/motion/Reveal";
 import { centeredHeaderTextStyle, screenPadding } from "@/constants/design-tokens";
 import { router } from "expo-router";
 import { FlatList, Pressable, RefreshControl, Text, View } from "react-native";
@@ -37,7 +38,7 @@ export default function OrdersScreen() {
     </View>
   );
   if (query.isLoading || session.isPending)
-    return <HookPageLoading title="My orders" label="Loading your orders" />;
+    return <HookPageLoading variant="list" title="My orders" label="Loading your orders" />;
   return (
     <View className="flex-1 bg-[#f4f4f5]" style={{ paddingTop: insets.top }}>
       <View className="pb-4 pt-3" style={{ paddingHorizontal: screenPadding }}>
@@ -64,7 +65,8 @@ export default function OrdersScreen() {
           gap: 12,
           paddingBottom: insets.bottom + 110,
         }}
-        renderItem={({ item }) => (
+        renderItem={({ item, index }) => (
+          <Reveal index={index}>
           <OrderCard
             order={item}
             onPress={() =>
@@ -74,6 +76,7 @@ export default function OrdersScreen() {
               } as never)
             }
           />
+          </Reveal>
         )}
         ListEmptyComponent={
           <View className="overflow-hidden rounded-[24px] bg-white">

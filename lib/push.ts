@@ -52,6 +52,22 @@ async function ensureAndroidChannel(Notifications: NotificationsModule) {
     vibrationPattern: [0, 250, 250, 250],
     lightColor: '#FFC809',
   });
+  // One channel per group, so each can be muted or changed in the phone's settings.
+  const groups: Array<[string, string, string, 'MAX' | 'DEFAULT' | 'LOW']> = [
+    ['orders', 'Orders and delivery', 'Updates about your orders, payments and deliveries', 'MAX'],
+    ['account', 'Account and security', 'Sign-ins and changes to your account', 'MAX'],
+    ['credit', 'Hook credit and referrals', 'Credit earned, spent and referral rewards', 'DEFAULT'],
+    ['reminders', 'Reminders', 'Your cart, negotiations and saved items', 'DEFAULT'],
+    ['discovery', 'New on Hook', 'New arrivals, markets and offers', 'LOW'],
+  ];
+  await Promise.all(groups.map(([id, name, description, level]) =>
+    Notifications.setNotificationChannelAsync(id, {
+      name,
+      description,
+      importance: Notifications.AndroidImportance[level],
+      lightColor: '#FFC809',
+    }),
+  ));
 }
 
 /** The EAS project the token belongs to. Explicit, so it never depends on config being inlined. */

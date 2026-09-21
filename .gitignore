@@ -52,3 +52,6 @@ app-example
 !/ios/hook/Info.plist
 # Local APK artifacts
 /build/
+
+# Firebase config: supplied to EAS builds through the GOOGLE_SERVICES_JSON file variable
+google-services.json

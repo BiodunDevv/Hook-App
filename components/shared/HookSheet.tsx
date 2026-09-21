@@ -1,6 +1,7 @@
 import { Ionicons } from "@expo/vector-icons";
-import type { PropsWithChildren } from "react";
+import { useCallback, useEffect, useRef, useState, type PropsWithChildren } from "react";
 import {
+  Keyboard,
   KeyboardAvoidingView,
   Modal,
   Platform,
@@ -8,7 +9,7 @@ import {
   Text,
   View,
 } from "react-native";
-import Animated, { SlideInDown, SlideOutDown, useReducedMotion } from "react-native-reanimated";
+import Animated, { Easing, interpolate, runOnJS, useAnimatedStyle, useReducedMotion, useSharedValue, withSpring, withTiming } from "react-native-reanimated";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 /**
@@ -19,16 +20,6 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
  * their content by default (no forced minHeight) so a short confirmation
  * doesn't leave dead space under its buttons.
  */
-
-const enterTransition = SlideInDown.springify()
-  .damping(24)
-  .stiffness(260)
-  .mass(0.82);
-
-const exitTransition = SlideOutDown.springify()
-  .damping(26)
-  .stiffness(300)
-  .mass(0.86);
 
 type HookSheetProps = PropsWithChildren<{
   visible: boolean;
@@ -61,6 +52,35 @@ export function HookSheet({
   const insets = useSafeAreaInsets();
   const reducedMotion = useReducedMotion();
   const canDismiss = dismissible && !busy;
+  // The Modal stays mounted while the sheet slides away, so closing animates as smoothly as opening.
+  const [mounted, setMounted] = useState(visible);
+  const progress = useSharedValue(visible ? 1 : 0);
+  // The close animation finishes on another thread. If the sheet was reopened meanwhile, the late "unmount" must be ignored,
+  // otherwise the sheet vanishes while the screen believes it is open and nothing can be tapped.
+  const wantsOpen = useRef(visible);
+  wantsOpen.current = visible;
+  const finishClose = useCallback(() => {
+    if (!wantsOpen.current) setMounted(false);
+  }, []);
+
+  useEffect(() => {
+    if (visible) {
+      setMounted(true);
+      progress.value = reducedMotion ? withTiming(1, { duration: 120 }) : withSpring(1, { damping: 24, stiffness: 260, mass: 0.82 });
+    } else {
+      // A keyboard left open by the search field would otherwise stay up over the screen behind.
+      Keyboard.dismiss();
+      progress.value = withTiming(0, { duration: reducedMotion ? 100 : 240, easing: Easing.out(Easing.cubic) }, (finished) => {
+        if (finished) runOnJS(finishClose)();
+      });
+    }
+  }, [visible, reducedMotion, progress, finishClose]);
+
+  const backdropStyle = useAnimatedStyle(() => ({ opacity: interpolate(progress.value, [0, 1], [0, 1]) }));
+  const sheetStyle = useAnimatedStyle(() => ({
+    opacity: interpolate(progress.value, [0, 0.25, 1], [0, 1, 1]),
+    transform: [{ translateY: interpolate(progress.value, [0, 1], [reducedMotion ? 0 : 520, 0]) }],
+  }));
 
   function handleClose() {
     if (canDismiss) onClose();
@@ -72,13 +92,14 @@ export function HookSheet({
       onRequestClose={handleClose}
       statusBarTranslucent
       transparent
-      visible={visible}
+      visible={mounted}
     >
       <KeyboardAvoidingView
         behavior={Platform.OS === "ios" ? "padding" : "height"}
         keyboardVerticalOffset={insets.top}
-        style={{ flex: 1, backgroundColor: "rgba(0,0,0,0.45)" }}
+        style={{ flex: 1 }}
       >
+        <Animated.View pointerEvents="none" style={[{ position: "absolute", top: 0, right: 0, bottom: 0, left: 0, backgroundColor: "rgba(0,0,0,0.45)" }, backdropStyle]} />
         <Pressable
           accessibilityLabel="Close"
           accessibilityRole="button"
@@ -90,16 +111,14 @@ export function HookSheet({
           accessibilityLabel={accessibilityLabel ?? title}
           accessibilityViewIsModal
           className="w-full self-end rounded-t-[28px] bg-[#F1F1F3] px-5 pt-3"
-          entering={reducedMotion ? undefined : enterTransition}
-          exiting={reducedMotion ? undefined : exitTransition}
-          style={{
+          style={[sheetStyle, {
             width: "100%", borderTopLeftRadius: 28, borderTopRightRadius: 28,
             backgroundColor: "#F1F1F3", paddingHorizontal: 20, paddingTop: 12,
             marginTop: "auto",
             ...(height ? { height } : minHeight ? { minHeight } : null),
             maxHeight,
             paddingBottom: Math.max(insets.bottom, 20),
-          }}
+          }]}
         >
           <View style={{ height: 4, width: 40, alignSelf: "center", borderRadius: 2, backgroundColor: "#CCC", marginBottom: 12 }} />
 

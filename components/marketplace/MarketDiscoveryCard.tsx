@@ -1,5 +1,7 @@
+import { PressScale } from "@/components/motion/PressScale";
+import { Ionicons } from "@expo/vector-icons";
 import { router } from "expo-router";
-import { Pressable, Text, View } from "react-native";
+import { Text, View } from "react-native";
 import { SvgXml } from "react-native-svg";
 
 import { RemoteImage } from "@/components/shared/RemoteImage";
@@ -8,7 +10,6 @@ import type { PublicMarket } from "@/lib/mobile-api";
 import {
   marketCardBackgroundXml,
   marketCardFrameXml,
-  popularBadgeTopXml,
   replaceSvgColor,
 } from "./figmaShapes";
 import { marketFallbackColors } from "./tokens";
@@ -54,18 +55,22 @@ export function MarketDiscoveryCard({
     marketFallbackColors[index % marketFallbackColors.length];
   const frameColor = getFrameColor(color);
   const textColor = getTextColor(color);
+  // City, then State, without repeating the same name ("Lagos, Lagos"); falls back to the street address.
+  const place = [market.city?.name, market.state?.name].filter((value, index, all): value is string => Boolean(value) && all.indexOf(value) === index);
+  const location = place.length ? place.join(", ") : market.address?.split(",").slice(-2).join(",").trim() || "";
 
   return (
-    <Pressable
+    <PressScale
       accessibilityRole="button"
       accessibilityLabel={`Open ${market.name}`}
+      scale={0.98}
+      innerClassName="relative h-[140px]"
       onPress={() =>
         router.push({
           pathname: "/markets/[id]",
           params: { id: market.publicId },
         } as never)
       }
-      className="relative h-[140px]"
     >
       <SvgXml
         xml={replaceSvgColor(marketCardBackgroundXml, color)}
@@ -74,22 +79,33 @@ export function MarketDiscoveryCard({
         style={{ position: "absolute", left: 0, top: 5 }}
       />
 
-      <View className="absolute left-0 top-0 z-10 h-[116px] w-[58%] justify-center pl-5 pt-1">
-        {market.isFeatured ? (
-          <View className="absolute left-5 top-0 h-[42px] w-[93px] items-center">
-            <SvgXml xml={popularBadgeTopXml} width={75} height={25} />
-            <View className="-mt-[15px] h-[31px] w-[93px] items-center justify-center rounded-full bg-[#FFC809]">
-              <Text className="text-[15px] font-black text-white">Popular</Text>
-            </View>
-          </View>
-        ) : null}
+      {market.isFeatured ? (
+        <View
+          className="absolute z-30 flex-row items-center rounded-full px-2.5 py-1"
+          style={{ right: 138, bottom: 50, backgroundColor: "rgba(255,255,255,0.24)" }}
+        >
+          <Ionicons name="star" size={11} color={textColor} />
+          <Text className="ml-1 text-[10px] font-black uppercase tracking-wider" style={{ color: textColor }}>
+            Popular
+          </Text>
+        </View>
+      ) : null}
+      <View className="absolute left-0 top-0 z-10 h-[116px] w-[60%] justify-center pl-5" style={{ paddingTop: 4 }}>
         <Text
           numberOfLines={2}
-          className="max-w-[175px] text-[22px] font-black leading-[23px]"
-          style={{ color: textColor }}
+          className="max-w-[190px] font-black"
+          style={{ color: textColor, fontSize: 20, lineHeight: 23 }}
         >
           {market.shortDisplayName || market.name}
         </Text>
+        {location ? (
+          <View className="mt-1.5 flex-row items-center" style={{ opacity: 0.9 }}>
+            <Ionicons name="location-sharp" size={12} color={textColor} />
+            <Text numberOfLines={1} className="ml-0.5 max-w-[160px] text-[11px] font-semibold" style={{ color: textColor }}>
+              {location}
+            </Text>
+          </View>
+        ) : null}
       </View>
 
       <View className="absolute -right-1 -top-[15px] z-20 h-[138px] w-[138px] items-center justify-center">
@@ -103,6 +119,6 @@ export function MarketDiscoveryCard({
           <RemoteImage uri={market.imageUrl} />
         </View>
       </View>
-    </Pressable>
+    </PressScale>
   );
 }
