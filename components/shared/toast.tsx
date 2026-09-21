@@ -1,4 +1,5 @@
 import { Ionicons } from '@expo/vector-icons';
+import { haptics } from '@/lib/haptics';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   Animated,
@@ -33,6 +34,9 @@ let nextId = 0;
 export const toast = {
   show(config: ToastConfig) {
     const state: ToastState = { ...config, id: ++nextId };
+    // Confirm outcomes by feel as well as by sight.
+    if (config.variant === 'success') haptics.success();
+    else if (config.variant === 'error') haptics.error();
     listeners.forEach((l) => l(state));
   },
   info(message: string, subtitle?: string) {

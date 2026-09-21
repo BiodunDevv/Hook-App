@@ -1,4 +1,5 @@
 import { Ionicons } from "@expo/vector-icons";
+import { SkeletonRows } from "@/components/motion/Skeleton";
 import { router } from "expo-router";
 import { useState } from "react";
 import { Image, Pressable, RefreshControl, ScrollView, Text, View } from "react-native";
@@ -66,8 +67,8 @@ export default function CreditsScreen() {
         </View>
 
         {credits.isLoading ? (
-          <View className="py-16">
-            <HookLoader />
+          <View className="pt-4 -mx-4">
+            <SkeletonRows count={4} label="Loading Hook credit" />
           </View>
         ) : credits.isError ? (
           <Pressable accessibilityRole="button" onPress={() => void refresh()} style={{ padding: 24, marginTop: 20, borderRadius: 22, backgroundColor: "white" }}>

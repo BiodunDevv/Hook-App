@@ -1,4 +1,6 @@
 import { Ionicons } from "@expo/vector-icons";
+import { Reveal } from "@/components/motion/Reveal";
+import { SkeletonRows } from "@/components/motion/Skeleton";
 import { router } from "expo-router";
 import { useEffect, useMemo, useState } from "react";
 import {
@@ -183,8 +185,8 @@ export default function MessagesScreen() {
       </View>
 
       {query.isLoading ? (
-        <View className="flex-1 items-center justify-center bg-white">
-          <HookLoader label="Loading conversations" />
+        <View className="flex-1 bg-white pt-4">
+          <SkeletonRows count={6} label="Loading conversations" />
         </View>
       ) : (
         <ScrollView
@@ -205,8 +207,8 @@ export default function MessagesScreen() {
           }}
         >
           {visibleRows.length ? (
-            visibleRows.map((row) => (
-              <ConversationRow key={row.negotiationId} row={row} now={now} />
+            visibleRows.map((row, index) => (
+              <Reveal key={row.negotiationId} index={index}><ConversationRow row={row} now={now} /></Reveal>
             ))
           ) : (
             <View className="flex-1 items-center justify-center px-10 pb-20">

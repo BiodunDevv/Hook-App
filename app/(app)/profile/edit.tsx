@@ -1,6 +1,7 @@
 import { Ionicons } from "@expo/vector-icons";
 import * as ImagePicker from "expo-image-picker";
 import { router } from "expo-router";
+import { ClearableInput } from "@/components/shared/ClearableInput";
 import { forwardRef, useEffect, useRef, useState } from "react";
 import {
   ActivityIndicator,
@@ -101,7 +102,7 @@ export default function EditProfileScreen() {
     }
   }
 
-  if (loading) return <HookPageLoading title="Edit profile" label="Loading profile" />;
+  if (loading) return <HookPageLoading variant="form" title="Edit profile" label="Loading profile" />;
 
   const name = `${form.firstName} ${form.lastName}`.trim();
   return (
@@ -200,7 +201,7 @@ const Field = forwardRef<TextInput, React.ComponentProps<typeof TextInput> & { l
       <View className="mb-4">
         <Text className="mb-2 text-[12px] font-bold text-[#5F5F64]">{label}</Text>
         <View className={`min-h-[54px] justify-center rounded-[14px] border px-4 ${input.editable === false ? "border-[#ECECEC] bg-[#F7F7F7]" : "border-[#DEDEDE] bg-white"}`}>
-          <TextInput
+          <ClearableInput
             ref={ref}
             {...input}
             className={`py-3 text-[15px] font-semibold text-black ${input.editable === false ? "text-[#8A8A8E]" : ""}`}

@@ -1,4 +1,5 @@
 import { Ionicons } from "@expo/vector-icons";
+import { Reveal } from "@/components/motion/Reveal";
 import { centeredHeaderTextStyle } from "@/constants/design-tokens";
 import { router } from "expo-router";
 import { HookRefreshControl } from "@/components/shared/HookRefreshControl";
@@ -23,7 +24,7 @@ export default function LikesScreen() {
     likes.data?.items.map((item) => item.product).filter(Boolean) || [];
 
   if (session.isPending || likes.isLoading) {
-    return <HookPageLoading title="Saved products" label="Loading your saved products" />;
+    return <HookPageLoading variant="grid" title="Saved products" label="Loading your saved products" />;
   }
 
   if (session.data?.user.accountType !== "customer") {
@@ -69,7 +70,7 @@ export default function LikesScreen() {
           padding: 16,
           paddingBottom: insets.bottom + 32,
         }}
-        renderItem={({ item }) => <CatalogProductCard product={item!} />}
+        renderItem={({ item, index }) => <Reveal index={index}><CatalogProductCard product={item!} /></Reveal>}
         ListEmptyComponent={
           <View className="items-center px-8 py-24">
             <View className="h-16 w-16 items-center justify-center rounded-full bg-white">

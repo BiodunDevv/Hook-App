@@ -1,6 +1,6 @@
 import { Ionicons } from "@expo/vector-icons";
 import { Image } from "expo-image";
-import { router } from "expo-router";
+import { router, useLocalSearchParams } from "expo-router";
 import { useEffect, useMemo, useState } from "react";
 import {
   Keyboard,
@@ -34,6 +34,7 @@ import { RemoteImage } from "@/components/shared/RemoteImage";
 import {
   type PublicCategory,
   type PublicCatalogProduct,
+  useCategoriesQuery,
   useDiscoverQuery,
   useMarketsQuery,
   useSearchSuggestionsQuery,
@@ -41,71 +42,26 @@ import {
 import { useHookLocation } from "@/lib/location-context";
 import { categoryVector3452Xml } from "@/components/marketplace/figmaShapes";
 import { MarketplaceCompactHeader } from "@/components/marketplace/MarketplaceCompactHeader";
+import { SKELETON_ITEMS, SkeletonProductCard, isSkeletonItem, type SkeletonItem } from "@/components/motion/Skeleton";
+import { rememberSearch, useRecentSearches } from "@/lib/recent-searches";
+import { BecauseYouLiked } from "./BecauseYouLiked";
+import { RecentlyViewed } from "./RecentlyViewed";
 import { ProductLayoutToggle } from "@/components/marketplace/ProductLayoutToggle";
 import { getHookTabBarContentInset } from "@/components/tab-bar/layout";
 
-const ALL_CATEGORY_IMAGE = require("../../assets/images/discover/all-category.png");
+const ALL_CATEGORY_IMAGE = require("../../assets/images/all-categories.png");
 const MAGNIFIER_IMAGE = require("../../assets/images/discover/magnifier.png");
 const DEFAULT_CATEGORY_IMAGE = require("../../assets/images/figma/category-market-art.png");
 
-function DiscoverProductSkeleton({
-  layout,
-  cardWidth,
-}: {
-  layout: "grid" | "list";
-  cardWidth: number;
-}) {
-  const opacity = useSharedValue(0.48);
-
-  useEffect(() => {
-    opacity.value = withRepeat(withTiming(0.9, { duration: 720 }), -1, true);
-    return () => cancelAnimation(opacity);
-  }, [opacity]);
-
-  const pulseStyle = useAnimatedStyle(() => ({ opacity: opacity.value }));
-
-  if (layout === "list") {
-    return (
-      <View className="gap-3 px-4" accessibilityLabel="Loading products">
-        {Array.from({ length: 5 }).map((_, index) => (
-          <Animated.View
-            key={index}
-            className="h-[116px] flex-row rounded-[14px] bg-white p-2.5"
-            style={pulseStyle}
-          >
-            <View className="h-24 w-24 rounded-[11px] bg-black/[0.08]" />
-            <View className="flex-1 justify-center px-3">
-              <View className="h-4 w-4/5 rounded-full bg-black/[0.08]" />
-              <View className="mt-3 h-3 w-2/5 rounded-full bg-black/[0.06]" />
-              <View className="mt-3 h-4 w-1/3 rounded-full bg-[#FFC809]/30" />
-            </View>
-          </Animated.View>
-        ))}
-      </View>
-    );
-  }
-
-  return (
-    <View
-      className="flex-row flex-wrap gap-x-3 gap-y-[18px] px-4"
-      accessibilityLabel="Loading products"
-    >
-      {Array.from({ length: 6 }).map((_, index) => (
-        <Animated.View key={index} style={[{ width: cardWidth }, pulseStyle]}>
-          <View className="aspect-square rounded-t-[10px] rounded-b-[20px] bg-black/[0.08]" />
-          <View className="mt-2 h-3.5 w-4/5 rounded-full bg-black/[0.08]" />
-          <View className="mt-2 h-3.5 w-2/5 rounded-full bg-[#FFC809]/30" />
-        </Animated.View>
-      ))}
-    </View>
-  );
-}
 
 export function DiscoverScreen() {
   const insets = useSafeAreaInsets();
   const { width: screenWidth } = useWindowDimensions();
   const { stateParams } = useHookLocation();
-  const [search, setSearch] = useState("");
+  const { q: initialQuery } = useLocalSearchParams<{ q?: string }>();
+  const [search, setSearch] = useState(typeof initialQuery === "string" ? initialQuery : "");
+  const [searchFocused, setSearchFocused] = useState(false);
+  const recents = useRecentSearches();
   const [debouncedSearch, setDebouncedSearch] = useState("");
   const [suggestionsOpen, setSuggestionsOpen] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -121,6 +77,15 @@ export function DiscoverScreen() {
   const compactHeaderHeight = insets.top + 62;
   const headerVisibleValue = useSharedValue(false);
   const searchPinnedValue = useSharedValue(false);
+
+  // Arriving from "See all results" on Home with a new term replaces the box.
+  useEffect(() => {
+    if (typeof initialQuery === "string" && initialQuery) {
+      setSearch(initialQuery);
+      setDebouncedSearch(initialQuery.trim());
+      setSuggestionsOpen(false);
+    }
+  }, [initialQuery]);
 
   useEffect(() => {
     const timeout = setTimeout(() => setDebouncedSearch(search.trim()), 280);
@@ -147,6 +112,12 @@ export function DiscoverScreen() {
     setSuggestionsOpen(true);
   }
 
+  // Sub-categories of the chosen category, from the category tree.
+  const categoryTree = useCategoriesQuery();
+  const activeParent = categoryTree.data?.find(
+    (item) => item.publicId === categoryId || item.children?.some((child) => child.publicId === categoryId),
+  );
+  const subCategories = activeParent?.children || [];
   const categoryRows = useMemo(
     () => [
       { publicId: "all", name: "All", slug: "all" } as PublicCategory,
@@ -220,9 +191,9 @@ export function DiscoverScreen() {
 
   return (
     <View className="flex-1 bg-[#F1F1F3]">
-      <Animated.FlatList<PublicCatalogProduct>
+      <Animated.FlatList<PublicCatalogProduct | SkeletonItem>
         key={layout}
-        data={discover.isLoading ? [] : products}
+        data={discover.isLoading || discover.isPlaceholderData ? SKELETON_ITEMS : products}
         numColumns={layout === "grid" ? 2 : 1}
         keyExtractor={(product) => product.publicId}
         renderItem={({ item: product }) => (
@@ -230,7 +201,7 @@ export function DiscoverScreen() {
             className={layout === "list" ? "px-4" : ""}
             style={layout === "grid" ? { flex: 1, maxWidth: gridCardWidth } : { width: "100%" }}
           >
-            <CatalogProductCard product={product} variant="figma" displayMode={layout} />
+            {isSkeletonItem(product) ? <SkeletonProductCard /> : <CatalogProductCard product={product} variant="figma" displayMode={layout} />}
           </View>
         )}
         columnWrapperStyle={layout === "grid" ? { gap: 12, paddingHorizontal: 16 } : undefined}
@@ -254,15 +225,15 @@ export function DiscoverScreen() {
         ListHeaderComponent={(
           <View>
         <View
-          className="relative bg-[#FFD93E] px-4"
-          style={{ paddingTop: insets.top + 10, paddingBottom: 32 }}
+          className="relative overflow-hidden rounded-b-[28px] bg-[#FFD93E] px-4"
+          style={{ paddingTop: insets.top + 6, paddingBottom: 16 }}
         >
           <View pointerEvents="none" className="absolute inset-x-0 top-0 h-[210px] overflow-hidden">
             <SvgXml xml={categoryVector3452Xml} width="100%" height="100%" />
           </View>
           <View className="relative h-11 flex-row items-center">
             <HookBackButton />
-            <View pointerEvents="none" className="absolute -right-5 -top-10 h-44 w-44">
+            <View pointerEvents="none" className="absolute -right-6 -top-8 h-32 w-32">
               <Image source={MAGNIFIER_IMAGE} contentFit="contain" style={{ width: "100%", height: "100%" }} />
             </View>
           </View>
@@ -282,10 +253,10 @@ export function DiscoverScreen() {
             </View>
           </Pressable>
 
-          <Text className="mt-3 text-[36px] font-black leading-[42px] text-black">Discover</Text>
+          <Text className="mt-2 text-[30px] font-black leading-[38px] text-black">Discover</Text>
 
           <Animated.View
-            className="mt-4 h-14 flex-row items-center rounded-[20px] bg-[#F1F1F3] px-4"
+            className="mt-3 h-[52px] flex-row items-center rounded-[20px] bg-[#F1F1F3] px-4"
             onLayout={(event) => { searchAnchorY.value = event.nativeEvent.layout.y; }}
             style={originalSearchStyle}
           >
@@ -297,6 +268,9 @@ export function DiscoverScreen() {
               returnKeyType="search"
               value={search}
               onChangeText={handleSearchChange}
+              onFocus={() => { setSearchFocused(true); setSuggestionsOpen(true); }}
+              onBlur={() => setSearchFocused(false)}
+              onSubmitEditing={() => { void rememberSearch(search); setDebouncedSearch(search.trim()); setSuggestionsOpen(false); }}
               autoCorrect={false}
               autoCapitalize="none"
             />
@@ -307,25 +281,56 @@ export function DiscoverScreen() {
             ) : null}
             <Ionicons name="search" size={25} color="#111" />
           </Animated.View>
-          {suggestionsOpen && search.trim() && suggestions.data?.length ? (
+          {suggestionsOpen && searchFocused ? (
             <View className="mt-2 overflow-hidden rounded-[16px] bg-white">
-              {suggestions.data.slice(0, 6).map((suggestion, index) => (
-                <Pressable
-                  key={`${suggestion}-${index}`}
-                  accessibilityRole="button"
-                  onPress={() => {
-                    setSearch(suggestion);
-                    setDebouncedSearch(suggestion);
-                    setSuggestionsOpen(false);
-                    Keyboard.dismiss();
-                  }}
-                  className={`flex-row items-center px-4 py-3.5 ${index ? "border-t border-black/5" : ""}`}
-                >
-                  <Ionicons name="search-outline" size={17} color="#858585" />
-                  <Text className="ml-3 flex-1 text-[13px] font-semibold text-black">{suggestion}</Text>
-                  <Ionicons name="arrow-up-outline" size={16} color="#A0A0A0" />
-                </Pressable>
-              ))}
+              {!search.trim() ? (
+                recents.items.length ? (
+                  <>
+                    <View className="flex-row items-center justify-between px-4 pb-1 pt-3">
+                      <Text className="text-[11px] font-black uppercase tracking-wider text-black/40">Recent searches</Text>
+                      <Pressable accessibilityRole="button" onPress={() => void recents.clear()} hitSlop={8}><Text className="text-[12px] font-bold text-black/50">Clear all</Text></Pressable>
+                    </View>
+                    {recents.items.slice(0, 6).map((item) => (
+                      <Pressable
+                        key={item}
+                        accessibilityRole="button"
+                        onPress={() => { setSearch(item); setDebouncedSearch(item); setSuggestionsOpen(false); Keyboard.dismiss(); }}
+                        className="flex-row items-center px-4 py-3"
+                      >
+                        <Ionicons name="time-outline" size={17} color="#98989D" />
+                        <Text numberOfLines={1} className="ml-3 flex-1 text-[14px] text-black">{item}</Text>
+                        <Pressable accessibilityLabel={`Remove ${item}`} onPress={() => void recents.remove(item)} hitSlop={10}><Ionicons name="close" size={16} color="#B0B0B5" /></Pressable>
+                      </Pressable>
+                    ))}
+                  </>
+                ) : (
+                  <Text className="px-4 py-5 text-center text-[13px] text-black/45">Search products, markets and categories.</Text>
+                )
+              ) : (
+                <>
+                  <Pressable
+                    accessibilityRole="button"
+                    onPress={() => { void rememberSearch(search); setDebouncedSearch(search.trim()); setSuggestionsOpen(false); Keyboard.dismiss(); }}
+                    className="flex-row items-center px-4 py-3.5"
+                  >
+                    <Ionicons name="search" size={17} color="#111" />
+                    <Text numberOfLines={1} className="ml-3 flex-1 text-[14px] font-bold text-black">Search for &quot;{search.trim()}&quot;</Text>
+                    <Ionicons name="arrow-forward" size={16} color="#A0A0A0" />
+                  </Pressable>
+                  {(suggestions.data || []).slice(0, 5).map((suggestion, index) => (
+                    <Pressable
+                      key={`${suggestion}-${index}`}
+                      accessibilityRole="button"
+                      onPress={() => { void rememberSearch(suggestion); setSearch(suggestion); setDebouncedSearch(suggestion); setSuggestionsOpen(false); Keyboard.dismiss(); }}
+                      className="flex-row items-center border-t border-black/5 px-4 py-3.5"
+                    >
+                      <Ionicons name="search-outline" size={17} color="#858585" />
+                      <Text className="ml-3 flex-1 text-[13px] font-semibold text-black">{suggestion}</Text>
+                      <Ionicons name="arrow-up-outline" size={16} color="#A0A0A0" />
+                    </Pressable>
+                  ))}
+                </>
+              )}
             </View>
           ) : null}
           <ScallopedEdge color="#FFD93E" count={15} size={28} edge="bottom" zIndex={0} />
@@ -367,6 +372,46 @@ export function DiscoverScreen() {
         </ScrollView>
         </Animated.View>
 
+        {subCategories.length ? (
+          <ScrollView
+            horizontal
+            showsHorizontalScrollIndicator={false}
+            contentContainerStyle={{ gap: 8, paddingHorizontal: 16, paddingTop: 12 }}
+          >
+            {[{ publicId: activeParent!.publicId, name: `All ${activeParent!.name}` }, ...subCategories].map((sub) => (
+              <Pressable
+                key={sub.publicId}
+                accessibilityRole="button"
+                accessibilityState={{ selected: categoryId === sub.publicId }}
+                onPress={() => setCategoryId(sub.publicId)}
+                className={`rounded-full border px-3.5 py-2 ${categoryId === sub.publicId ? "border-black bg-black" : "border-black/15 bg-white"}`}
+              >
+                <Text className={`text-[12px] font-semibold ${categoryId === sub.publicId ? "text-white" : "text-black/70"}`}>{sub.name}</Text>
+              </Pressable>
+            ))}
+          </ScrollView>
+        ) : null}
+
+        {categoryId === "all" && !debouncedSearch ? (
+          <>
+            <RecentlyViewed />
+            <BecauseYouLiked />
+          </>
+        ) : null}
+
+        {activeParent ? (
+          <View className="mx-4 mt-5 flex-row items-center justify-between rounded-2xl bg-white px-4 py-3">
+            <View>
+              <Text className="text-[11px] font-semibold uppercase tracking-wider text-black/40">Category</Text>
+              <Text className="text-[16px] font-black text-black">
+                {activeParent.name}
+                {categoryId !== activeParent.publicId ? <Text className="font-medium text-black/50">  ›  {subCategories.find((item) => item.publicId === categoryId)?.name}</Text> : null}
+              </Text>
+            </View>
+            <Text className="text-xs font-semibold text-black/45">{subCategories.length} types</Text>
+          </View>
+        ) : null}
+
         <View className="mt-5 flex-row items-center justify-between px-4">
           <View>
             <Text className="text-[25px] font-black text-black">Explore</Text>
@@ -397,7 +442,7 @@ export function DiscoverScreen() {
         ) : null}
           </View>
         )}
-        ListEmptyComponent={discover.isLoading ? <DiscoverProductSkeleton layout={layout} cardWidth={gridCardWidth} /> : null}
+        ListEmptyComponent={null}
       />
 
       <MarketplaceCompactHeader
@@ -436,6 +481,11 @@ export function DiscoverScreen() {
             value={search}
             onChangeText={handleSearchChange}
           />
+          {search ? (
+            <Pressable accessibilityLabel="Clear search" onPress={() => { setSearch(""); setSuggestionsOpen(false); }} hitSlop={10} className="mr-2">
+              <Ionicons name="close-circle" size={19} color="#888" />
+            </Pressable>
+          ) : null}
           <Ionicons name="search" size={25} color="#111" />
         </View>
       </Animated.View>

@@ -1,4 +1,5 @@
 import { Ionicons } from '@expo/vector-icons';
+import { SkeletonRows } from "@/components/motion/Skeleton";
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useState } from 'react';
 import { Pressable, RefreshControl, ScrollView, Text, View } from 'react-native';
@@ -63,7 +64,7 @@ export default function DevicesScreen() {
           <Text className="mt-4 text-lg font-black text-black">You stay in control</Text>
           <Text className="mt-1 text-sm leading-5 text-black/55">Signing out a device revokes its session, notifications, and live connection immediately.</Text>
         </View>
-        {query.isLoading ? <View className="py-24"><HookLoader /></View> : (
+        {query.isLoading ? <View className="pt-4 -mx-4"><SkeletonRows count={3} label="Loading devices" /></View> : (
           <View className="mt-5 overflow-hidden rounded-[14px] bg-white">
             {query.data?.map((device, index) => {
               const deviceId = device.id || device.deviceId;

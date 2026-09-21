@@ -118,6 +118,7 @@ function invalidateForConfig(queryClient: ReturnType<typeof useQueryClient>, sco
     commerce: [["mobile", "commerce-config"], ["mobile", "credit-config"], ["mobile", "credits"], ["mobile", "referrals"], ["mobile", "cart"]],
     legal: [["mobile", "legal"]],
     coupons: [["mobile", "coupons"]],
+    banners: [["mobile", "banners"]],
   };
   for (const queryKey of keys[scope || ""] || []) queryClient.invalidateQueries({ queryKey });
 }
@@ -139,7 +140,7 @@ function invalidateForEvent(queryClient: ReturnType<typeof useQueryClient>, even
     queryClient.invalidateQueries({ queryKey: ["mobile", "cart"] });
     queryClient.invalidateQueries({ queryKey: ["mobile", "likes"] });
     queryClient.invalidateQueries({ queryKey: ["mobile", "negotiations"] });
-    for (const scope of ["delivery", "logistics", "commerce", "legal", "coupons"]) invalidateForConfig(queryClient, scope);
+    for (const scope of ["delivery", "logistics", "commerce", "legal", "coupons", "banners"]) invalidateForConfig(queryClient, scope);
     return;
   }
   if (event === "home.updated" || event === "catalog.updated") {

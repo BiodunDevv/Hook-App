@@ -2,6 +2,7 @@ import AsyncStorage from "@react-native-async-storage/async-storage";
 import * as Crypto from "expo-crypto";
 
 import type { PublicCatalogProduct } from "@/lib/mobile-api";
+import { variantSignature, type SelectedVariants } from "@/lib/variant-axes";
 
 const KEY = "hook.anonymous-commerce.v1";
 
@@ -9,7 +10,7 @@ export type AnonymousCartItem = {
   clientLineId: string;
   productId: string;
   variantId?: string;
-  selectedVariants?: { color?: string; size?: string };
+  selectedVariants?: SelectedVariants;
   quantity: number;
   productSnapshot: {
     title: string;
@@ -64,14 +65,14 @@ export function onAnonymousCommerceChanged(listener: () => void) {
   return () => { listeners.delete(listener); };
 }
 
-function variantKey(item: { variantId?: string; selectedVariants?: { color?: string; size?: string } }) {
-  return item.variantId || `${item.selectedVariants?.color || "-"}::${item.selectedVariants?.size || "-"}`.toLowerCase();
+function variantKey(item: { variantId?: string; selectedVariants?: SelectedVariants }) {
+  return item.variantId || variantSignature(item.selectedVariants);
 }
 
 export function addAnonymousCartItem(input: {
   product: PublicCatalogProduct;
   variantId?: string;
-  selectedVariants?: { color?: string; size?: string };
+  selectedVariants?: SelectedVariants;
   quantity: number;
 }) {
   return update((current) => {
@@ -151,12 +152,18 @@ export async function clearImportedAnonymousCommerce(cartLineIds: string[], like
   }));
 }
 
-export function anonymousCartResponse(value: AnonymousCommerce, products: PublicCatalogProduct[] = []) {
-  const productMap = new Map(products.map((product) => [product.publicId, product]));
+/**
+ * `products` is what the status lookup returned. When it is undefined the lookup did not happen or failed (offline, a
+ * blip), so availability is unknown: keep the lines purchasable and let the server decide at import and checkout,
+ * instead of blocking every guest line on a network hiccup.
+ */
+export function anonymousCartResponse(value: AnonymousCommerce, products?: PublicCatalogProduct[]) {
+  const productMap = new Map((products || []).map((product) => [product.publicId, product]));
+  const lookupUnknown = products === undefined;
   const items = value.cartItems.map((item) => ({
     ...(() => {
       const product = productMap.get(item.productId);
-      const checkoutEligible = product ? product.isPurchasable : false;
+      const checkoutEligible = product ? product.isPurchasable : lookupUnknown;
       return {
         checkoutEligible,
         blockingReasons: checkoutEligible ? [] : ["RUNNER_CONFIRMATION_REQUIRED"],

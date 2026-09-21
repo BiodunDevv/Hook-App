@@ -37,7 +37,7 @@ function MarketVisual({ scale }: { scale: number }) {
         source={onboardingMarket}
         resizeMode="contain"
         style={{
-          height: 454 * scale,
+          height: 452 * scale,
           left: 31 * scale,
           position: "absolute",
           top: 119 * scale,

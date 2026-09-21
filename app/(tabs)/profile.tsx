@@ -198,6 +198,7 @@ export default function ProfileScreen() {
 
           <ProfileSection title="Security">
             <ProfileRow icon="lock-closed" label="Password & biometrics" onPress={() => router.push("/profile/security" as never)} />
+            <ProfileRow icon="notifications" label="Notifications" onPress={() => router.push("/profile/notifications" as never)} />
             <ProfileRow icon="phone-portrait" label="Your devices" onPress={() => router.push("/profile/devices" as never)} />
             <ProfileRow icon="language" label="Language" value="English" onPress={() => toast.info("Language settings", "More languages are coming soon.")} />
           </ProfileSection>

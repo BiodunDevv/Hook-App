@@ -1,6 +1,8 @@
+import { configureNetworkProbe, reportRequest } from '@/lib/network-status';
 import { clearSession, getSession, saveSession, type AuthSession } from '@/lib/session';
 
 const API_BASE_URL = process.env.EXPO_PUBLIC_API_URL || 'http://localhost:4000/api/v1';
+configureNetworkProbe(API_BASE_URL);
 
 export class ApiError extends Error {
   constructor(
@@ -143,6 +145,7 @@ export async function apiRequest<T>(path: string, options: ApiOptions = {}): Pro
       if (session?.accessToken) headers.set('Authorization', `Bearer ${session.accessToken}`);
     }
     let response: Response;
+    const startedAt = Date.now();
     logRequest(method, path, options.body);
     // Without a timeout a hung connection left the UI spinning forever. A
     // timeout is AMBIGUOUS for a mutation: the server may have completed it,
@@ -161,8 +164,11 @@ export async function apiRequest<T>(path: string, options: ApiOptions = {}): Pro
         headers,
         signal: controller.signal,
       });
+      reportRequest('ok', Date.now() - startedAt);
     } catch (error) {
       logNetworkError(method, path, error);
+      // A request the caller cancelled says nothing about the connection.
+      if (!callerSignal?.aborted) reportRequest('failed', Date.now() - startedAt);
       if (controller.signal.aborted && !callerSignal?.aborted) {
         throw new ApiError(
           method === 'GET'

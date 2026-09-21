@@ -1,11 +1,15 @@
 import { Ionicons } from "@expo/vector-icons";
 import { router } from "expo-router";
+import { useState } from "react";
 import { Pressable, Text, View } from "react-native";
+import { PressScale } from "@/components/motion/PressScale";
+import { QuickAddSheet } from "./QuickAddSheet";
 import { RemoteImage } from "@/components/shared/RemoteImage";
 import { toast } from "@/components/shared/toast";
 import { ApiError } from "@/lib/api";
 import {
   useCustomerSessionQuery,
+  usePrefetchProduct,
   useLikedProductsQuery,
   useToggleProductLikeMutation,
   type PublicCatalogProduct,
@@ -27,6 +31,8 @@ export function CatalogProductCard({
   const session = useCustomerSessionQuery();
   const likes = useLikedProductsQuery();
   const toggleLike = useToggleProductLikeMutation();
+  const [quickAddOpen, setQuickAddOpen] = useState(false);
+  const prefetchProduct = usePrefetchProduct();
   const isLiked = likes.data?.productIds.includes(product.publicId) ?? false;
   const likePending =
     toggleLike.isPending &&
@@ -98,10 +104,8 @@ export function CatalogProductCard({
   }
 
   return (
-    <Pressable
-      onPress={openProduct}
-      className="w-full"
-    >
+    <>
+    <PressScale onPressIn={() => prefetchProduct(product.publicId)} onPress={openProduct} scale={0.98} className="w-full">
       <View
         className={`relative aspect-square overflow-hidden bg-[#FAFAFA] ${
           figma ? "rounded-t-[10px] rounded-b-[20px]" : "rounded-xl"
@@ -135,6 +139,16 @@ export function CatalogProductCard({
             color={isLiked ? "#FFC809" : "#777"}
           />
         </Pressable>
+        {!unavailable ? (
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel={`Add ${product.title} to cart`}
+            onPress={(event) => { event.stopPropagation?.(); setQuickAddOpen(true); }}
+            className="absolute bottom-2 right-2 h-8 w-8 items-center justify-center rounded-full bg-[#FFC809]"
+          >
+            <Ionicons name="add" size={18} color="#111" />
+          </Pressable>
+        ) : null}
         {product.market?.name && !unavailable ? (
           <View className="absolute bottom-2 left-2 rounded-full bg-white/25 px-2 py-1">
             <Text numberOfLines={1} className="max-w-24 text-[8px] text-black">
@@ -159,6 +173,8 @@ export function CatalogProductCard({
           </Text>
         ) : null}
       </View>
-    </Pressable>
+    </PressScale>
+    <QuickAddSheet product={product} visible={quickAddOpen} onClose={() => setQuickAddOpen(false)} />
+    </>
   );
 }

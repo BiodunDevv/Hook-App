@@ -1,4 +1,5 @@
 import { router, useLocalSearchParams } from "expo-router";
+import { SkeletonListPage } from "@/components/motion/Skeleton";
 import { centeredHeaderTextStyle } from "@/constants/design-tokens";
 import * as Crypto from "expo-crypto";
 import { useQueryClient } from "@tanstack/react-query";
@@ -344,8 +345,8 @@ export default function NegotiationScreen() {
     (session.isPending && Boolean(sessionId))
   )
     return (
-      <View className="flex-1 items-center justify-center bg-[#F1F1F3]">
-        <HookLoader label="Preparing negotiation" />
+      <View className="flex-1 bg-[#F1F1F3]" style={{ paddingTop: insets.top + 68 }}>
+        <SkeletonListPage rows={2} />
       </View>
     );
   return (
