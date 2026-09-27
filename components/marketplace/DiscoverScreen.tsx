@@ -155,8 +155,7 @@ export function DiscoverScreen() {
     },
   });
 
-  // Matches the smooth crossfade already used on the Market and Category screens instead of a discrete opacity
-  // snap, so the compact header morphs in rather than popping in.
+  // Matches the smooth crossfade used on Market/Category screens so the compact header morphs in, not pops in.
   const compactHeaderStyle = useAnimatedStyle(() => ({
     opacity: interpolate(scrollY.value, [13, 63], [0, 1], Extrapolation.CLAMP),
     transform: [{ translateY: interpolate(scrollY.value, [13, 63], [-8, 0], Extrapolation.CLAMP) }],

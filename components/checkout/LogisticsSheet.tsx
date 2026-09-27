@@ -65,8 +65,7 @@ export function LogisticsSheet({
                   className={`flex-row items-center justify-between rounded-[10px] px-4 py-2.5 ${active ? "border border-hook bg-[#fff9e5]" : "bg-white"}`}
                   style={{ flexDirection: "row", alignItems: "center", gap: 12, borderRadius: 16, padding: 16, borderWidth: 1, borderColor: active ? "#FFC809" : "#DDD", backgroundColor: active ? "#FFF9E5" : "white" }}
                 >
-                  {/* expo-image renders the SVG marks couriers publish; the
-                      fallback tile keeps the row aligned when one has no logo. */}
+                  {/* Fallback tile keeps the row aligned when a courier has no logo. */}
                   {provider.logoUrl ? (
                     <Image
                       source={{ uri: provider.logoUrl }}

@@ -17,6 +17,7 @@ import { HookConfirmSheet } from "@/components/shared/HookConfirmSheet";
 import { HookLoader } from "@/components/shared/HookLoader";
 import { RemoteImage } from "@/components/shared/RemoteImage";
 import { toast } from "@/components/shared/toast";
+import { openOrderSupport } from "@/lib/support-api";
 import { waitForPaymentConfirmation } from "@/lib/payment-status";
 import {
   useCancelOrderMutation,
@@ -191,7 +192,11 @@ export default function OrderDetailScreen() {
 
       {order.awaitingDeliveryFee ? <View className="mt-4 rounded-[22px] bg-white p-4"><View className="flex-row items-center gap-3"><View className="h-10 w-10 items-center justify-center rounded-full bg-[#fff4c7]"><Ionicons name="bicycle-outline" size={21} color="#9a7400" /></View><View className="flex-1"><Text className="font-black">Pay your delivery fee to start</Text><Text className="mt-1 text-xs leading-5 text-[#777]">You pay {money(Number(order.podFeeDueNowMinor || 0))} now. The rest, {money(Math.max(0, Number(order.totalMinor || 0) - Number(order.podFeeDueNowMinor || 0)))}, is paid securely when your order arrives.</Text></View></View><View className="mt-3 flex-row gap-2"><Pressable disabled={paymentBusy} onPress={() => sharePayment()} className="h-[52px] flex-1 items-center justify-center rounded-2xl border border-black/10 bg-white"><Text className="font-black">Share link</Text></Pressable><Pressable disabled={paymentBusy} onPress={() => resumePayment()} className="h-[52px] flex-[1.4] flex-row items-center justify-center gap-2 rounded-2xl bg-hook">{paymentBusy ? <HookLoader size="button" /> : <Ionicons name="card-outline" size={19} color="#111" />}<Text className="font-black">Pay {money(Number(order.podFeeDueNowMinor || 0))} now</Text></Pressable></View></View> : null}
       {order.paymentMethod === "PREPAID" && !["CONFIRMED", "PAID"].includes(String(order.paymentStatus || "").toUpperCase()) ? <View className="mt-4 flex-row gap-2"><Pressable disabled={paymentBusy} onPress={() => sharePayment()} className="h-[52px] flex-1 items-center justify-center rounded-2xl border border-black/10 bg-white"><Text className="font-black">Share payment</Text></Pressable><Pressable disabled={paymentBusy} onPress={() => resumePayment()} className="h-[52px] flex-1 flex-row items-center justify-center gap-2 rounded-2xl bg-hook">{paymentBusy ? <HookLoader size="button" /> : <Ionicons name="card-outline" size={19} color="#111" />}<Text className="font-black">Pay securely</Text></Pressable></View> : null}
-      {order.canCancel ? <Pressable onPress={() => setCancelOpen(true)} className="mt-5 items-center py-3"><Text className="font-black text-red-600">Cancel unpaid order</Text></Pressable> : null}
+      <Pressable onPress={() => void openOrderSupport(order.publicId || order.displayNumber || id!).catch(() => toast.error("Could not open support. Please try again."))} className="mt-5 flex-row items-center justify-center gap-1.5 py-3">
+        <Ionicons name="help-buoy-outline" size={16} color="#555" />
+        <Text className="font-black text-[#555]">Contact support about this order</Text>
+      </Pressable>
+      {order.canCancel ? <Pressable onPress={() => setCancelOpen(true)} className="items-center py-3"><Text className="font-black text-red-600">Cancel unpaid order</Text></Pressable> : null}
     </ScrollView>}
 
     <HookConfirmSheet visible={cancelOpen} title="Cancel this order?" message="This will cancel the unpaid order and deactivate every payment link created for it." confirmLabel="Cancel order" cancelLabel="Keep order" destructive busy={cancelOrder.isPending} onClose={() => setCancelOpen(false)} onConfirm={async () => { if (!id) return; try { await cancelOrder.mutateAsync({ orderId: id, reason: "Cancelled by customer before payment" }); setCancelOpen(false); toast.success("Order cancelled"); } catch (error) { toast.error(error instanceof Error ? error.message : "Order could not be cancelled"); } }} />

@@ -44,11 +44,7 @@ import {
 const inputClass =
   "h-12 rounded-2xl border border-black/10 bg-[#fafafa] px-4 text-sm text-black";
 
-/**
- * Mirrors the backend Zod limits in Hook-Backend/src/validations/commerce.schemas.ts
- * addressCreateSchema exactly, so the field a user is over-typing in is the
- * one that visibly stops them, instead of a generic error after submit.
- */
+/** Mirrors the backend's addressCreateSchema limits so the field being over-typed stops the user, not a submit error. */
 const FIELD_LIMITS = {
   label: 60,
   recipientName: 120,
@@ -128,8 +124,7 @@ export default function AddressesScreen() {
   const stateRows = (states.data || []) as HookOperatingState[];
   const selectedState = stateRows.find((state) => state.publicId === draft.stateId);
   const localGovernments = useLocalGovernmentsQuery(draft.stateId);
-  // useLocalGovernmentsQuery resolves { state, data: PublicLocalGovernment[] } —
-  // the rows are nested under .data.data, not the query result's top-level .data.
+  // Rows are nested under .data.data, not the query result's top-level .data.
   const localGovernmentRows = (localGovernments.data?.data || []) as PublicLocalGovernment[];
   const saving = create.isPending || update.isPending;
 
@@ -376,12 +371,7 @@ export default function AddressesScreen() {
 const SWIPE_ACTION_WIDTH = 72;
 const SWIPE_OPEN_OFFSET = -(SWIPE_ACTION_WIDTH * 2);
 
-/**
- * Swipe-left-to-reveal address card. Edit/delete sit in a fixed action rail
- * behind the card instead of squeezed inline next to the "Default" pill,
- * which is what caused the overlap — this also matches the native
- * swipe-to-action pattern users already know from Mail/Messages.
- */
+/** Swipe-left-to-reveal address card with edit/delete in a fixed action rail. */
 function SwipeableAddressCard({
   address,
   removing,
@@ -603,11 +593,7 @@ function EmptyLocation({ message }: { message: string }) {
   );
 }
 
-/**
- * Labeled input field with an optional right-aligned character counter that
- * turns red once the value can no longer be saved — the user sees the limit
- * before submitting, instead of learning about it from a backend error.
- */
+/** Labeled input field with an optional character counter that turns red at the save limit. */
 function LabeledField({
   label,
   optional,

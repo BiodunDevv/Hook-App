@@ -20,12 +20,7 @@ function open(banner: PublicBanner) {
   else if (banner.linkType === "market") router.push({ pathname: "/markets/[id]", params: { id: banner.linkTarget } } as never);
 }
 
-/**
- * Edge-to-edge marquee. It drifts on its own; put a finger on it and it follows
- * the finger, and on release it glides on with the swipe's momentum and eases to
- * a stop before drifting again. A tap opens the message under the finger.
- * It holds still on a single message when the device asks for reduced motion.
- */
+/** Edge-to-edge marquee that drifts on its own, follows touch, and glides on release; a tap opens that message. */
 export function BannerCarousel({ placement = "home", className = "mt-4" }: { placement?: "home" | "category"; className?: string }) {
   const query = useBannersQuery(placement);
   const banners = query.data || [];

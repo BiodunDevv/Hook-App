@@ -46,12 +46,7 @@ export function CheckoutSheet({ visible, onClose, title, children, fullScreen = 
       handleIndicatorStyle={{ backgroundColor: "#C8C8CC" }}
       onChange={(index) => { if (index === -1 && visibleRef.current) onClose(); }}
     >
-      {/*
-        Gorhom's docs are explicit that a plain RN View must never sit as a direct child of BottomSheet — only its
-        own BottomSheetView/BottomSheetScrollView primitives correctly propagate the gesture and layout events that
-        let a nested ScrollView actually scroll. iOS's native scroll view often papers over the difference, but on
-        Android a plain View here silently breaks scrolling in every sheet built on this component.
-      */}
+      {/* Must be BottomSheetView, not a plain View — a plain View breaks nested ScrollView scrolling on Android. */}
       <BottomSheetView accessibilityViewIsModal style={{ flex: 1, minHeight: 0 }}>
         <View style={{ paddingHorizontal: 20, paddingBottom: 16, flexDirection: "row", alignItems: "center", gap: 12 }}>
           <Text accessibilityRole="header" style={{ flex: 1, fontFamily: "NunitoSans-Bold", fontSize: 20, color: designTokens.color.ink }}>{title}</Text>

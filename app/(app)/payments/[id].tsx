@@ -14,8 +14,7 @@ export default function PaymentStatusScreen() {
   const status = String(data?.payment?.status || "").toUpperCase();
   const { refetch } = query;
 
-  // A payment can stay pending for a while (bank delay, closed browser). Keep checking, but stop showing a
-  // spinner with no way out: after about a minute offer the order, and stop polling after three.
+  // Keep polling while pending, but offer the order link after a minute and stop polling after three.
   const [waitedMs, setWaitedMs] = useState(0);
   useEffect(() => {
     if (!id || ["CONFIRMED", "FAILED", "REFUNDED"].includes(status)) return;
@@ -30,9 +29,7 @@ export default function PaymentStatusScreen() {
   }, [id, refetch, status]);
   const stillWaiting = waitedMs > 60_000;
 
-  // The route param may be a payment id, so navigate with the order id the
-  // status response returns. Passing the param through sent customers to an
-  // order that did not exist.
+  // The route param may be a payment id, so navigate using the order id from the status response instead.
   const orderId = data?.order?.id;
   const openOrder = () =>
     router.replace(

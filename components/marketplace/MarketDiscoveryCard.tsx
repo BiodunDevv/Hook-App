@@ -124,6 +124,5 @@ function MarketDiscoveryCardBase({
   );
 }
 
-// Scroll-driven state (header visibility, search-pin) lives on the Home screen that renders a list of these; without
-// memoizing, every such state change re-renders every card in the list even though none of their props changed.
+// Memoized so scroll-driven state on the Home screen doesn't re-render every card in the list.
 export const MarketDiscoveryCard = memo(MarketDiscoveryCardBase);

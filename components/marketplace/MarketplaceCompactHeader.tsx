@@ -13,6 +13,7 @@ import { useCustomerSessionQuery } from "@/lib/mobile-api";
 import { isCustomerSession } from "@/lib/session";
 import { ProfileAvatar } from "@/components/profile/ProfileComponents";
 import { HookBackButton } from "@/components/shared/HookBackButton";
+import { NotificationBellButton } from "@/components/shared/NotificationBellButton";
 
 type MarketplaceCompactHeaderProps = {
   title?: string;
@@ -82,13 +83,7 @@ export function MarketplaceCompactHeader({
           {hasBack ? (
             <HookBackButton onPress={onBack} />
           ) : (
-            <Pressable
-              accessibilityLabel="Open notifications"
-              onPress={() => isCustomerSession(session.data) ? router.push("/notifications" as never) : openAuth("/notifications" as never)}
-              className="h-11 w-11 items-center justify-center rounded-full bg-white"
-            >
-              <Ionicons name="notifications-outline" size={20} color="#8B6D52" />
-            </Pressable>
+            <NotificationBellButton />
           )}
         </View>
 
@@ -145,17 +140,7 @@ export function MarketplaceCompactHeader({
                 <Ionicons name="cube-outline" size={21} color="#E6B000" />
               </Pressable>
             ) : null}
-            {!isHomeHeader ? <Pressable
-              accessibilityLabel="Open notifications"
-              onPress={() => isCustomerSession(session.data) ? router.push("/notifications" as never) : openAuth("/notifications" as never)}
-              className="h-11 w-11 items-center justify-center rounded-full bg-white"
-            >
-              <Ionicons
-                name="notifications-outline"
-                size={20}
-                color="#8B6D52"
-              />
-            </Pressable> : null}
+            {!isHomeHeader ? <NotificationBellButton /> : null}
             {isHomeHeader ? (
               <Pressable
                 accessibilityLabel="Open profile"

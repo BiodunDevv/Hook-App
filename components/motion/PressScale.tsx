@@ -15,10 +15,7 @@ type Props = Omit<PressableProps, "style" | "children"> & {
   innerClassName?: string;
 };
 
-/**
- * A pressable that gives a quick spring shrink under the finger, so taps feel
- * answered immediately. Use it for cards and large tap targets.
- */
+/** A pressable that gives a quick spring shrink under the finger; use for cards and large tap targets. */
 export function PressScale({ children, scale = 0.97, style, className, innerStyle, innerClassName, onPressIn, onPressOut, ...rest }: Props) {
   const reduced = useReducedMotion();
   const value = useSharedValue(1);

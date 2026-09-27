@@ -54,9 +54,7 @@ export default function OnboardingScreen() {
       style={{ paddingBottom: Math.max(insets.bottom, 12) }}
     >
       <AuthGlowBackground />
-      {/* Purely decorative, and its absolutely-positioned pieces can overflow
-          this container — without pointerEvents="none" they sit over the
-          Next button and swallow taps. */}
+      {/* Decorative and absolutely positioned; needs pointerEvents="none" or it swallows taps on Next. */}
       <View
         className="min-h-0 flex-1 items-center justify-end overflow-hidden"
         pointerEvents="none"

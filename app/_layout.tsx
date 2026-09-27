@@ -54,8 +54,7 @@ export default function RootLayout() {
   const isMarketHero = pathname.includes("/markets/");
   const isMainTab = ['/', '/discover', '/messages', '/profile'].includes(pathname);
   const safeAreaBackground = isMainTab ? '#F1F1F3' : '#FFFFFF';
-  // Every route fills the window. Interactive footers reserve their own safe
-  // area rather than shrinking the entire navigator and exposing a bottom strip.
+  // Every route fills the window; footers reserve their own safe area instead of shrinking the navigator.
   const isFullBleedRoute = isLaunchSplash || pathname === "/onboarding";
   const [fontsLoaded] = useFonts({
     "NunitoSans-Regular": require("@expo-google-fonts/nunito-sans/400Regular/NunitoSans_400Regular.ttf"),
@@ -159,10 +158,7 @@ export default function RootLayout() {
             <AppQueryProvider>
               <HookLocationProvider>
                 <AuthSheetProvider>
-                  {/* Hook's UI is light-only (fixed #F1F1F3 surfaces, dark
-                      status bar), so the navigation theme is pinned rather
-                      than following the device — otherwise native chrome
-                      like the iOS tab bar flips appearance between screens. */}
+                  {/* Hook's UI is light-only, so the nav theme is pinned rather than following the device. */}
                   <ThemeProvider value={DefaultTheme}>
             <Stack screenOptions={{ headerShown: false, animation: "slide_from_right", animationDuration: 260 }}>
               <Stack.Screen

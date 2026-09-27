@@ -80,9 +80,7 @@ export default function CheckoutScreen() {
   const [couponInput, setCouponInput] = useState("");
   const [coupon, setCoupon] = useState<{ code: string; discountMinor: number; appliesToDelivery: boolean }>();
   const [acceptedPolicies, setAcceptedPolicies] = useState(false);
-  // Pay now is the default. The customer only picks when another method (Pay
-  // on delivery) is actually available.
-  // The customer always makes this choice themselves; the sheet opens when they tap Pay without having chosen.
+  // Pay now is the default; the customer only picks when Pay on Delivery is actually available.
   const [paymentChosen, setPaymentChosen] = useState(false);
   const [method, setMethod] = useState<"PREPAID" | "PAY_AT_HANDOVER">("PREPAID");
   const [sheet, setSheet] = useState<"address" | "logistics" | "payment" | null>(null);
@@ -95,8 +93,7 @@ export default function CheckoutScreen() {
     || addressRows.find((item) => item.isDefault)
     || addressRows[0];
   const operatingStates = useOperatingStatesQuery();
-  // Pulling refreshes everything checkout shows: the cart, addresses, delivery
-  // prices, couriers, wallet and commerce settings.
+  // Pulling refreshes everything checkout shows: cart, addresses, delivery, couriers, wallet, settings.
   const { refreshing, onRefresh } = usePullRefresh(
     () => cart.refetch(),
     () => addresses.refetch(),
@@ -115,16 +112,13 @@ export default function CheckoutScreen() {
   const cartItems = getCartItems(cart.data);
   const providers = logistics.data || [];
   const podGloballyOn = Boolean((config.data as { podEnabled?: boolean } | undefined)?.podEnabled);
-  // The only real "admin switched it off" signal — kept distinct from every other unavailable reason below,
-  // which are about this specific order/address, not about the feature being off entirely.
+  // The only "admin switched it off" signal, distinct from reasons tied to this order/address.
   const podOffEntirely = !podGloballyOn;
   // Settings the admin controls: VAT, and what Pay on Delivery needs and costs.
   const vatRate = Number(config.data?.vatRatePercent ?? 7.5) / 100;
   const podMinimumMinor = Number(config.data?.podMinimumOrderMinor ?? 3_000_000);
 
-  // Hook credit is applied by default as soon as the wallet is available. A
-  // customer's explicit choice is then preserved for the rest of this
-  // checkout, even if the wallet query refreshes in the background.
+  // Hook credit is applied by default once the wallet loads; an explicit customer choice then persists for checkout.
   useEffect(() => {
     if (!credits.isSuccess) return;
     const hasSpendableBalance = Number(credits.data?.balanceMinor || 0) > 0;
@@ -140,9 +134,7 @@ export default function CheckoutScreen() {
     setUseCredits(next);
   }
 
-  // Mirrors CheckoutService.calculateMoney so the figures shown here match the
-  // server's quote. The server stays the source of truth — this is only so the
-  // customer sees live totals while picking options.
+  // Mirrors CheckoutService.calculateMoney so live totals match the server's quote while picking options.
   const money = useMemo(() => {
     const subtotalMinor = cartItems.reduce(
       (sum, item) => sum + Number(item.totalPriceMinor ?? Number(item.unitPriceMinor || 0) * Number(item.quantity || 0)),
@@ -308,9 +300,7 @@ export default function CheckoutScreen() {
         useCredits,
         deliveryNote: deliveryNote.trim() || undefined,
       });
-      // One key per logical checkout, stored on the device. A retry after a
-      // timeout, remount or app restart reuses it, so the server returns the
-      // order it already created instead of making a second one.
+      // Stable per-checkout key so a retry reuses the already-created order instead of making a new one.
       const idempotencyKey = await stableIdempotencyKey(
         "checkout.confirm",
         JSON.stringify({
@@ -325,8 +315,7 @@ export default function CheckoutScreen() {
       try {
         order = await confirm.mutateAsync({ previewToken: summary.previewToken, idempotencyKey });
       } catch (error) {
-        // A definite rejection (e.g. balance changed) frees the key so the
-        // corrected checkout can run; an ambiguous one keeps it for the retry.
+        // A definite rejection frees the key for a corrected retry; an ambiguous one keeps it.
         if (!isAmbiguousFailure(error)) await releaseIdempotencyKey("checkout.confirm");
         else toast.info("We could not confirm your order went through", "Tap Pay now again. You will not be charged twice.");
         throw error;
@@ -346,8 +335,7 @@ export default function CheckoutScreen() {
       );
       await WebBrowser.dismissBrowser();
       if (browserResult.type === "cancel" || browserResult.type === "dismiss") {
-        // Closing the payment page is not a completed payment — say so clearly instead of quietly moving on, which
-        // read as though the order had gone through either way.
+        // Closing the payment page is not a completed payment — say so clearly instead of moving on quietly.
         const isPod = method === "PAY_AT_HANDOVER";
         toast.error(
           isPod ? "Delivery fee not paid" : "Payment not completed",
@@ -403,8 +391,7 @@ export default function CheckoutScreen() {
 
   if (paymentStage) return <PaymentProcessingScreen stage={paymentStage} />;
 
-  // While a guest cart is being merged into the account (or the server cart is
-  // still loading), the cart is not "empty", it is on its way.
+  // A cart still merging or loading is not "empty" — it is on its way.
   if (cart.isLoading || addresses.isLoading || config.isLoading || syncingCommerce || (!cartItems.length && cart.isFetching))
     return <HookPageLoading variant="form" title="Checkout" label={syncingCommerce ? "Moving your cart to your account" : "Preparing checkout"} />;
 
@@ -431,8 +418,7 @@ export default function CheckoutScreen() {
         refreshControl={<HookRefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
         contentContainerStyle={{
           padding: 16,
-          // Clears the 52pt floating action without leaving a large empty
-          // band after the consent card on taller phones.
+          // Clears the floating action without leaving dead space under the consent card on taller phones.
           paddingBottom: Math.max(insets.bottom, 12) + 72,
         }}
         showsVerticalScrollIndicator={false}
@@ -622,8 +608,7 @@ export default function CheckoutScreen() {
         selectedId={provider?.publicId || provider?.id}
         onSelect={(next) => {
           setProvider(next);
-          // A free-delivery coupon is priced against the courier's fee, so it
-          // has to be re-checked when that fee changes.
+          // Re-check a free-delivery coupon since it's priced against the courier's fee.
           if (coupon?.appliesToDelivery) setCoupon(undefined);
           setSheet(null);
         }}

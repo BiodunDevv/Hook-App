@@ -2,11 +2,7 @@ import { Ionicons } from "@expo/vector-icons";
 import { Pressable, Text, View } from "react-native";
 import { HookLoader } from "@/components/shared/HookLoader";
 
-/**
- * The white pill used for every picker on the checkout screen. Empty shows a
- * placeholder and a chevron; filled shows the chosen value and a gold
- * "Change" chip, matching the design's two states.
- */
+/** The picker pill used on checkout: empty shows a placeholder and chevron, filled shows the value and a "Change" chip. */
 export function CheckoutRow({
   placeholder,
   value,

@@ -33,6 +33,7 @@ import { Reveal } from "@/components/motion/Reveal";
 import { SkeletonCategoryCircles, SkeletonMarketCards } from "@/components/motion/Skeleton";
 import { RecentlyViewed } from "./RecentlyViewed";
 import { ProfileAvatar } from "@/components/profile/ProfileComponents";
+import { NotificationBellButton } from "@/components/shared/NotificationBellButton";
 
 const HOOK_APP_ICON = require("../../assets/images/market-icon.png");
 
@@ -68,8 +69,7 @@ export function MarketplaceHomeScreen() {
     const all: PublicCategory = { publicId: "all", name: "All", slug: "all" };
     return categories.length ? [all, ...categories, comingSoon] : [comingSoon];
   }, [categoriesQuery.data]);
-  // One stable handler per category (not a fresh inline closure per render), so CategoryCircle's memoization
-  // actually holds when scroll-driven state (header visibility, search pin) re-renders this screen.
+  // One stable handler per category so CategoryCircle's memoization holds across scroll-driven re-renders.
   const categoryHandlers = useMemo(() => {
     const handlers = new Map<string, () => void>();
     for (const category of displayCategories) {
@@ -267,13 +267,7 @@ export function MarketplaceHomeScreen() {
           >
             <HookYellowPattern />
             <View className="flex-row items-center justify-between">
-              <Pressable
-                accessibilityLabel="Open notifications"
-                onPress={() => isCustomerSession(session.data) ? router.push("/notifications" as never) : openAuth("/notifications" as never)}
-                className="h-11 w-11 items-center justify-center rounded-full bg-white"
-              >
-                <Ionicons name="notifications-outline" size={20} color="#8B6D52" />
-              </Pressable>
+              <NotificationBellButton />
               <Pressable
                 accessibilityRole="button"
                 accessibilityLabel={`Operating state: ${selectedState.name}`}

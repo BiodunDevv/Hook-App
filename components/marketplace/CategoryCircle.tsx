@@ -69,6 +69,5 @@ function CategoryCircleBase({
   );
 }
 
-// A stable `onPress` from the caller (see MarketplaceHomeScreen's `categoryHandlers`) lets this actually skip
-// re-rendering when scroll-driven state elsewhere on the screen changes.
+// Memoized so a stable `onPress` from the caller actually skips re-renders from scroll-driven screen state.
 export const CategoryCircle = memo(CategoryCircleBase);
