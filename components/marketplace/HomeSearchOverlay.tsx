@@ -42,12 +42,7 @@ const Row = ({ onPress, children }: { onPress: () => void; children: React.React
   </Pressable>
 );
 
-/**
- * The search panel for the home screen. Before typing it offers recent
- * searches and popular categories; while typing it groups markets, products
- * and categories, loads with skeleton rows, and ends with "See all results".
- * It replaces the market list while open, so closing search returns to it.
- */
+/** Home-screen search panel: recent/popular before typing, grouped results while typing, replacing the market list. */
 export function HomeSearchOverlay({ visible, query, loading, markets, products, categories, popularCategories = [], recents = [], onPickRecent, onRemoveRecent, onClearRecents, onOpened }: Props) {
   if (!visible) return null;
   const term = query.trim();

@@ -102,9 +102,7 @@ export default function ProductDetailScreen() {
   }
 
   const variants = useMemo(() => product?.variants || [], [product?.variants]);
-  // What the customer chooses comes from the product's category: size and
-  // colour for shoes, capacity and colour for a powerbank, length and texture
-  // for a wig. Axes with a single value choose themselves.
+  // Choosable options come from the product's category; axes with a single value choose themselves.
   const axes = useMemo(() => buildAxes(variants, product?.category?.attributes), [variants, product?.category?.attributes]);
   const activeSelection = useMemo(() => autoSelection(axes, selection), [axes, selection]);
   const missingAxis = nextMissingAxis(axes, activeSelection);
@@ -120,9 +118,7 @@ export default function ProductDetailScreen() {
   const negotiatedPriceMinor = Number(quote?.agreedPriceMinor || 0);
   const displayPriceMinor =
     negotiatedPriceMinor || Number(product?.effectivePriceMinor || 0);
-  // Endless "more like this": the parent category (so sibling sub-categories
-  // appear too), then a market-wide fallback. Items from the same
-  // sub-category float first within what has loaded.
+  // "More like this": parent category first (so sibling sub-categories show), with a market-wide fallback.
   const related = useInfiniteProductsQuery(
     { categoryId: product?.category?.parent?.publicId || product?.category?.publicId, limit: 12 },
     Boolean(product?.category?.publicId),
@@ -176,10 +172,7 @@ export default function ProductDetailScreen() {
     setSelection((current) => choose(variants, axes, current, axisKey, value));
   }
 
-  /**
-   * The buttons stay visible before the options are chosen. Tapping one says what is left to choose and brings that
-   * option into view, instead of the buttons disappearing.
-   */
+  /** Tapping an unchosen option button says what's left to choose and scrolls it into view, rather than hiding it. */
   function promptForOptions() {
     haptics.select();
     const labels = axes.filter((axis) => !activeSelection[axis.key]).map((axis) => axis.label.toLowerCase());

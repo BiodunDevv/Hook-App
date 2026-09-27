@@ -11,6 +11,7 @@ import {
 } from "react-native";
 import Animated, { Easing, interpolate, runOnJS, useAnimatedStyle, useReducedMotion, useSharedValue, withSpring, withTiming } from "react-native-reanimated";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { SPRING_PANEL } from "@/constants/motion";
 
 /**
  * Canonical bottom sheet shell for the whole app — same rounded top, drag
@@ -66,7 +67,7 @@ export function HookSheet({
   useEffect(() => {
     if (visible) {
       setMounted(true);
-      progress.value = reducedMotion ? withTiming(1, { duration: 120 }) : withSpring(1, { damping: 24, stiffness: 260, mass: 0.82 });
+      progress.value = reducedMotion ? withTiming(1, { duration: 120 }) : withSpring(1, SPRING_PANEL);
     } else {
       // A keyboard left open by the search field would otherwise stay up over the screen behind.
       Keyboard.dismiss();
@@ -91,12 +92,14 @@ export function HookSheet({
       animationType="none"
       onRequestClose={handleClose}
       statusBarTranslucent
+      // Without this Android leaves the system navigation bar area uncovered, so the sheet floats above a strip of the screen behind it.
+      navigationBarTranslucent
       transparent
       visible={mounted}
     >
       <KeyboardAvoidingView
-        behavior={Platform.OS === "ios" ? "padding" : "height"}
-        keyboardVerticalOffset={insets.top}
+        behavior={Platform.OS === "ios" ? "padding" : undefined}
+        keyboardVerticalOffset={Platform.OS === "ios" ? insets.top : 0}
         style={{ flex: 1 }}
       >
         <Animated.View pointerEvents="none" style={[{ position: "absolute", top: 0, right: 0, bottom: 0, left: 0, backgroundColor: "rgba(0,0,0,0.45)" }, backdropStyle]} />

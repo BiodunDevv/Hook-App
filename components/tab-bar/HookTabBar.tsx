@@ -24,6 +24,7 @@ import {
   HOOK_TAB_BAR_BOTTOM_GAP,
   HOOK_TAB_BAR_HEIGHT,
 } from "@/components/tab-bar/layout";
+import { SPRING_PANEL } from "@/constants/motion";
 
 type IconName = React.ComponentProps<typeof Ionicons>["name"];
 
@@ -42,11 +43,7 @@ const tabs: Record<string, TabItemConfig> = {
 
 const mainTabNames = new Set(Object.keys(tabs));
 
-const spring = {
-  damping: 22,
-  stiffness: 240,
-  mass: 0.7,
-};
+const spring = SPRING_PANEL;
 
 function AnimatedTabItem({
   selected,

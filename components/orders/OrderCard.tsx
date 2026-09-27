@@ -26,14 +26,7 @@ function naira(order: Order) {
   return `₦${(minor / 100).toLocaleString("en-NG", { maximumFractionDigits: 2 })}`;
 }
 
-/**
- * One row in the orders list.
- *
- * The item thumbnails are stacked with a negative offset rather than laid out
- * in a row: an order can hold many items, and a full row would either overflow
- * the card or shrink the status pill to nothing. Overlapping keeps the footprint
- * fixed no matter how many items there are.
- */
+/** One row in the orders list; thumbnails overlap with a negative offset so the footprint stays fixed regardless of item count. */
 export function OrderCard({ order, onPress }: { order: Order; onPress: () => void }) {
   const items = order.items || [];
   const shown = items.slice(0, MAX_THUMBS);
@@ -43,9 +36,7 @@ export function OrderCard({ order, onPress }: { order: Order; onPress: () => voi
 
   return (
     <Pressable onPress={onPress} className="rounded-[22px] bg-white" style={{ padding: screenPadding }}>
-      {/* Title and pill share a row but the pill may wrap to its own line:
-          long status copy ("Hook is sourcing your items") previously ran off
-          the right edge of the screen. */}
+      {/* Pill may wrap to its own line, since long status copy previously ran off the screen edge. */}
       <View className="flex-row flex-wrap items-center justify-between gap-y-2">
         <Text className="shrink font-black" numberOfLines={1}>
           {order.displayNumber || order.id}

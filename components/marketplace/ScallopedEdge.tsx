@@ -1,7 +1,4 @@
-/**
- * Retired: headers now end in a clean rounded edge instead of scallops.
- * Kept as a no-op so existing imports keep working.
- */
+/** Retired: headers now use a plain rounded edge; kept as a no-op so existing imports keep working. */
 type ScallopedEdgeProps = {
   color?: string;
   count?: number;

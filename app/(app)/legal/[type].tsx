@@ -10,12 +10,7 @@ import { HookBackButton } from "@/components/shared/HookBackButton";
 import { HookPageLoading } from "@/components/shared/HookPageLoading";
 import { useLegalContentQuery } from "@/lib/mobile-api";
 
-/**
- * Renders the small, controlled HTML shape the backend produces for legal
- * content (only <h2>, <p>, <ul>/<ol>/<li>, and <em> — see
- * seed-legal-content.ts) as native text blocks. Pulling in a full HTML/WebView
- * renderer isn't worth it for this narrow, backend-authored content.
- */
+/** Renders the backend's narrow legal HTML shape as native text blocks, without a full HTML/WebView renderer. */
 function LegalBody({ html }: { html: string }) {
   const blocks = html
     .split(/<\/(h2|p|ul|ol)>/)

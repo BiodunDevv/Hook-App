@@ -22,11 +22,7 @@ function productImage(item: any) {
   );
 }
 
-/**
- * Items grouped by market, matching the design's "Review order" block. Uses
- * the same market-resolution fallback chain as the cart screen so a line that
- * only carries marketId still lands in the right group.
- */
+/** Items grouped by market, using the same market-resolution fallback as the cart screen. */
 export function ReviewOrderSection({ items, onEditOrder }: { items: any[]; onEditOrder: () => void }) {
   const [open, setOpen] = useState(true);
   const catalog = useCartMarketProductsQuery({ items });

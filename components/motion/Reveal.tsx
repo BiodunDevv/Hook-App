@@ -16,11 +16,7 @@ type RevealProps = {
 const STEP = 55;
 const MAX_STAGGER = 8;
 
-/**
- * Fades and rises content into place when it first appears. Use it around
- * sections, cards and list rows so every screen reveals the same way. It
- * does nothing when the device asks for reduced motion.
- */
+/** Fades and rises content into place on first appearance; does nothing when reduced motion is requested. */
 export function Reveal({ children, index = 0, delay = 0, from = "bottom", style, className }: RevealProps) {
   const reduced = useReducedMotion();
   const wait = delay + Math.min(index, MAX_STAGGER) * STEP;
@@ -30,7 +26,8 @@ export function Reveal({ children, index = 0, delay = 0, from = "bottom", style,
       ? FadeInUp.delay(wait).duration(340)
       : from === "none"
         ? FadeIn.delay(wait).duration(320)
-        : FadeInDown.delay(wait).duration(360).springify().damping(18).stiffness(160);
+        // Fixed timing curve, not a spring, so a grid of cards settles cleanly without visible jiggle.
+        : FadeInDown.delay(wait).duration(260);
   return (
     <Animated.View entering={entering} style={style} className={className}>
       {children}

@@ -25,7 +25,7 @@ export function PaymentMethodSheet({
   estimatedEarnMinor,
   payNowTotalMinor,
   podTotalMinor,
-  podPaused,
+  podOffEntirely,
   stateName,
   method,
   onSelectMethod,
@@ -44,7 +44,8 @@ export function PaymentMethodSheet({
   estimatedEarnMinor: number;
   payNowTotalMinor: number;
   podTotalMinor: number;
-  podPaused: boolean;
+  /** True only when an admin has switched Pay on Delivery off entirely — distinct from state/minimum-order reasons. */
+  podOffEntirely: boolean;
   stateName?: string;
   method: "PREPAID" | "PAY_AT_HANDOVER";
   onSelectMethod: (method: "PREPAID" | "PAY_AT_HANDOVER") => void;
@@ -192,7 +193,7 @@ export function PaymentMethodSheet({
               </View>
               <View style={{ backgroundColor: podAvailable ? "#E6F7E9" : "#EEE", borderRadius: 8, paddingHorizontal: 9, paddingVertical: 3 }}>
                 <Text style={{ fontSize: 10, fontFamily: "NunitoSans-Bold", letterSpacing: 0.6, color: podAvailable ? "#1E7A2E" : "#666" }}>
-                  {podAvailable ? (stateName ? `AVAILABLE IN ${stateName.toUpperCase()}` : "AVAILABLE") : "NOT AVAILABLE"}
+                  {podAvailable ? (stateName ? `AVAILABLE IN ${stateName.toUpperCase()}` : "AVAILABLE") : podOffEntirely ? "UNAVAILABLE" : "NOT AVAILABLE"}
                 </Text>
               </View>
             </View>
@@ -220,9 +221,9 @@ export function PaymentMethodSheet({
               </>
             ) : (
               <View style={{ flexDirection: "row", alignItems: "flex-start", gap: 10 }}>
-                <Ionicons name="information-circle-outline" size={18} color="#777" style={{ marginTop: 1 }} />
+                <Ionicons name={podOffEntirely ? "time-outline" : "information-circle-outline"} size={18} color="#777" style={{ marginTop: 1 }} />
                 <Text style={{ flex: 1, fontSize: 14, lineHeight: 20, color: "#666" }}>
-                  {podPaused ? "Temporarily paused. Please pay now to place this order." : podUnavailableReason || "Not available for this order. Please choose Pay now."}
+                  {podUnavailableReason || "Not available for this order. Please choose Pay now."}
                 </Text>
               </View>
             )}

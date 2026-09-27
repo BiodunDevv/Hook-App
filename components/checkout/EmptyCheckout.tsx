@@ -6,10 +6,7 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Button } from "@/components/ui/button";
 import { HookPageHeader } from "@/components/shared/HookPageHeader";
 
-/**
- * Shown at checkout only when the cart is truly empty (after any guest-cart
- * merge has finished). Keeps the same fixed header as the rest of checkout.
- */
+/** Shown at checkout only once the cart is truly empty (any guest-cart merge has finished). */
 export function EmptyCheckout() {
   const insets = useSafeAreaInsets();
   return (

@@ -1,6 +1,7 @@
 import type { ReactNode } from "react";
 import { Pressable, type PressableProps, type StyleProp, type ViewStyle } from "react-native";
 import Animated, { useAnimatedStyle, useReducedMotion, useSharedValue, withSpring } from "react-native-reanimated";
+import { SPRING_PRESS_IN, SPRING_PRESS_OUT } from "@/constants/motion";
 
 type Props = Omit<PressableProps, "style" | "children"> & {
   children: ReactNode;
@@ -14,10 +15,7 @@ type Props = Omit<PressableProps, "style" | "children"> & {
   innerClassName?: string;
 };
 
-/**
- * A pressable that gives a quick spring shrink under the finger, so taps feel
- * answered immediately. Use it for cards and large tap targets.
- */
+/** A pressable that gives a quick spring shrink under the finger; use for cards and large tap targets. */
 export function PressScale({ children, scale = 0.97, style, className, innerStyle, innerClassName, onPressIn, onPressOut, ...rest }: Props) {
   const reduced = useReducedMotion();
   const value = useSharedValue(1);
@@ -29,11 +27,11 @@ export function PressScale({ children, scale = 0.97, style, className, innerStyl
         style={innerStyle}
         className={innerClassName}
         onPressIn={(event) => {
-          if (!reduced) value.value = withSpring(scale, { damping: 16, stiffness: 400 });
+          if (!reduced) value.value = withSpring(scale, SPRING_PRESS_IN);
           onPressIn?.(event);
         }}
         onPressOut={(event) => {
-          value.value = withSpring(1, { damping: 14, stiffness: 300 });
+          value.value = withSpring(1, SPRING_PRESS_OUT);
           onPressOut?.(event);
         }}
       >

@@ -27,18 +27,13 @@ import {
 
 const naira = (minor: number) => `₦${Math.round(minor / 100).toLocaleString("en-NG")}`;
 
-/**
- * Add-to-cart from a product card. Shows the options this product asks for,
- * a quantity, then confirms exactly what was added, with a way to open the
- * cart or keep shopping. Nothing is added until the customer confirms.
- */
+/** Add-to-cart from a product card: options, quantity, then a confirmation; nothing added until the customer confirms. */
 export function QuickAddSheet({ product: listed, visible, onClose }: { product: PublicCatalogProduct; visible: boolean; onClose: () => void }) {
   const add = useAddCartItemMutation();
   // The photo flies from the sheet's thumbnail into its cart icon, which bounces: the same tap feedback as the product page.
   const cartAnimation = useCartAddAnimation(listed.publicId);
   const thumbRef = useRef<View>(null);
-  // Cards carry a light product. The full one has the category's questions
-  // (phone model, length, capacity...) and every variant, so load it when opened.
+  // Cards carry a light product; load the full one (category questions, variants) when the sheet opens.
   const full = useProductQuery(visible ? listed.publicId : undefined);
   const product = full.data || listed;
   const loadingOptions = visible && full.isLoading;

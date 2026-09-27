@@ -2,10 +2,7 @@ import { Text, View } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { designTokens } from "@/constants/design-tokens";
 
-/**
- * The two-bar progress header from the checkout design: the current step's
- * bar is Hook gold, the one still ahead is white.
- */
+/** Two-bar checkout progress header: the current step's bar is gold, the one ahead is white. */
 export function CheckoutSteps({ step }: { step: 1 | 2 }) {
   return (
     <View style={{ flexDirection: "row", gap: 12 }}>

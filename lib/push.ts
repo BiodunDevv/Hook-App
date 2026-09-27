@@ -76,6 +76,14 @@ function easProjectId() {
     ?? (Constants as { easConfig?: { projectId?: string } }).easConfig?.projectId;
 }
 
+// Current permission only — never prompts. For UI that needs to know before asking.
+export async function getPushPermissionStatus(): Promise<'granted' | 'denied' | 'undetermined' | 'unavailable'> {
+  const Notifications = getNotifications();
+  if (!Notifications || !Device.isDevice) return 'unavailable';
+  const permission = await Notifications.getPermissionsAsync();
+  return permission.status;
+}
+
 export async function registerPushToken(options: { sendWelcome?: boolean } = {}) {
   try {
     if (!Device.isDevice) { devNote('Push tokens are only issued to a physical device, not a simulator or emulator.'); return null; }

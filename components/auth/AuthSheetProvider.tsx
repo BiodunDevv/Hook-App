@@ -42,14 +42,12 @@ export function AuthSheetProvider({ children }: PropsWithChildren) {
   const hasSocialAuth = google.isGoogleReady || (Platform.OS === "ios" && apple.isAppleReady);
   const snapPoints = useMemo(() => ["100%"], []);
 
-  // Whether a customer is signed in. The sheet must never be visible then, so
-  // this is checked on open, on every session change, and on every sheet change.
+  // Whether a customer is signed in; the sheet must never show when they are.
   const signedIn = useRef(false);
   const hardClose = useCallback(() => {
     authOpen.current = false;
     Keyboard.dismiss();
-    // forceClose ignores an in-flight animation or keyboard transition, which
-    // is why a plain close() could leave the sheet stuck on screen.
+    // forceClose skips an in-flight animation/keyboard transition that would leave the sheet stuck open.
     sheet.current?.forceClose();
   }, []);
 
@@ -74,8 +72,7 @@ export function AuthSheetProvider({ children }: PropsWithChildren) {
   const closeAuth = useCallback(() => { hardClose(); reset(); }, [hardClose, reset]);
   const hasPendingIntent = useCallback(() => Boolean(intent.current), []);
   const openAuth = useCallback((next?: Href) => {
-    // Already signed in: there is nothing to sign in to. Carry on to where the
-    // customer was headed instead of showing the login sheet.
+    // Already signed in: carry on to where the customer was headed instead of showing the login sheet.
     void getSession().then((session) => {
       if (isCustomerSession(session)) {
         signedIn.current = true;

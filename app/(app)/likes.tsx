@@ -4,7 +4,7 @@ import { centeredHeaderTextStyle } from "@/constants/design-tokens";
 import { router } from "expo-router";
 import { HookRefreshControl } from "@/components/shared/HookRefreshControl";
 import { usePullRefresh } from "@/hooks/use-pull-refresh";
-import { FlatList, Pressable, Text, View } from "react-native";
+import { FlatList, Pressable, Text, useWindowDimensions, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { CatalogProductCard } from "@/components/marketplace/CatalogProductCard";
@@ -17,11 +17,14 @@ import {
 
 export default function LikesScreen() {
   const insets = useSafeAreaInsets();
+  const { width: screenWidth } = useWindowDimensions();
   const session = useCustomerSessionQuery();
   const likes = useLikedProductsQuery();
   const { refreshing, onRefresh } = usePullRefresh(() => likes.refetch());
   const products =
     likes.data?.items.map((item) => item.product).filter(Boolean) || [];
+  // Same per-card width math as the Discover grid, so the two feel like one consistent product-grid language.
+  const gridCardWidth = Math.floor((screenWidth - 44) / 2);
 
   if (session.isPending || likes.isLoading) {
     return <HookPageLoading variant="grid" title="Saved products" label="Loading your saved products" />;
@@ -56,7 +59,14 @@ export default function LikesScreen() {
     <View className="flex-1 bg-[#F1F1F3]" style={{ paddingTop: insets.top }}>
       <View className="flex-row items-center justify-between px-4 py-3">
         <HookBackButton />
-        <Text style={centeredHeaderTextStyle}>Your likes</Text>
+        <View className="items-center">
+          <Text style={centeredHeaderTextStyle}>Saved products</Text>
+          {products.length > 0 ? (
+            <Text className="mt-0.5 text-[11px] font-medium text-[#8F8F8F]">
+              {products.length} saved
+            </Text>
+          ) : null}
+        </View>
         <View className="w-11" />
       </View>
       <FlatList
@@ -64,13 +74,17 @@ export default function LikesScreen() {
         refreshControl={<HookRefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
         numColumns={2}
         keyExtractor={(item) => item!.publicId}
-        columnWrapperStyle={{ gap: 12 }}
+        columnWrapperStyle={{ gap: 12, paddingHorizontal: 16 }}
         contentContainerStyle={{
-          gap: 16,
-          padding: 16,
+          gap: 18,
+          paddingTop: 16,
           paddingBottom: insets.bottom + 32,
         }}
-        renderItem={({ item, index }) => <Reveal index={index}><CatalogProductCard product={item!} /></Reveal>}
+        renderItem={({ item, index }) => (
+          <Reveal index={index} style={{ flex: 1, maxWidth: gridCardWidth }}>
+            <CatalogProductCard product={item!} variant="figma" />
+          </Reveal>
+        )}
         ListEmptyComponent={
           <View className="items-center px-8 py-24">
             <View className="h-16 w-16 items-center justify-center rounded-full bg-white">

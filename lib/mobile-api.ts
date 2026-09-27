@@ -1190,6 +1190,9 @@ export interface PublicBanner {
   text: string;
   imageUrl?: string;
   tone: "gold" | "dark" | "green" | "red";
+  /** A custom colour an admin picked, instead of one of the four fixed tones. Wins over `tone` when present. */
+  colorBg?: string | null;
+  colorFg?: string | null;
   linkType: "category" | "product" | "market" | "none";
   linkTarget: string;
 }

@@ -17,6 +17,9 @@ import { useAuthSheet } from "@/components/auth/AuthSheetProvider";
 import { ProfileAvatar, ProfileRow, ProfileSection } from "@/components/profile/ProfileComponents";
 import { HookConfirmSheet } from "@/components/shared/HookConfirmSheet";
 import { toast } from "@/components/shared/toast";
+import { openDeleteAccountPage } from "@/lib/account-deletion-api";
+import { openSupport } from "@/lib/support-api";
+import { SupportPushBanner } from "@/components/shared/SupportPushBanner";
 import { logout, useLocalSessionQuery } from "@/lib/auth-api";
 import { useCreditsQuery } from "@/lib/mobile-api";
 import { unregisterPushToken } from "@/lib/push";
@@ -53,9 +56,7 @@ export default function ProfileScreen() {
     void refetch();
   }, [refetch]));
 
-  // Opening Profile signed out should go straight to sign-in rather than
-  // making the user tap through the placeholder. The ref keeps it to one
-  // prompt per visit, so dismissing the sheet doesn't immediately reopen it.
+  // Opening Profile signed out goes straight to sign-in, once per visit so dismissing it doesn't reopen it.
   const promptedThisVisit = useRef(false);
   useFocusEffect(useCallback(() => {
     if (!local.isFetching && !session && !promptedThisVisit.current) {
@@ -177,6 +178,8 @@ export default function ProfileScreen() {
           </View>
         </View>
 
+        <SupportPushBanner />
+
         <View className="px-4">
           <ProfileSection title="General">
             <ProfileRow icon="person" label="Edit Profile" onPress={() => router.push("/profile/edit" as never)} />
@@ -204,11 +207,11 @@ export default function ProfileScreen() {
           </ProfileSection>
 
           <ProfileSection title="Support and legal">
-            <ProfileRow icon="call" label="Help & support" onPress={() => toast.info("Hook support", "Support options are coming soon.")} neutral />
+            <ProfileRow icon="call" label="Help & support" onPress={() => void openSupport().catch(() => toast.error("Could not open support. Please try again."))} neutral />
             <ProfileRow icon="document-text" label="Terms of Service" onPress={() => router.push("/legal/terms" as never)} neutral />
             <ProfileRow icon="shield-checkmark" label="Privacy Policy" onPress={() => router.push("/legal/privacy" as never)} neutral />
             <ProfileRow icon="refresh-circle" label="Returns Policy" onPress={() => router.push("/legal/returns" as never)} neutral />
-            <ProfileRow icon="trash" label="Delete account" onPress={() => router.push("/profile/delete-account" as never)} danger />
+            <ProfileRow icon="trash" label="Delete account" onPress={() => void openDeleteAccountPage().catch(() => toast.error("Could not open the page. Please try again."))} danger />
           </ProfileSection>
 
           <ProfileSection title="App information">

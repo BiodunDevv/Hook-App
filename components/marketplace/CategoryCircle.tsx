@@ -1,14 +1,16 @@
 import { Ionicons } from "@expo/vector-icons";
 import { haptics } from "@/lib/haptics";
+import { memo } from "react";
 import { Pressable, Text, View } from "react-native";
 import Animated, { FadeInRight, useAnimatedStyle, useSharedValue, withSpring } from "react-native-reanimated";
 import { RemoteImage } from "@/components/shared/RemoteImage";
+import { SPRING_PRESS_IN, SPRING_PRESS_OUT } from "@/constants/motion";
 import type { PublicCategory } from "@/lib/mobile-api";
 
 const DEFAULT_CATEGORY_IMAGE = require("../../assets/images/figma/category-market-art.png");
 const ALL_CATEGORIES_IMAGE = require("../../assets/images/all-categories.png");
 
-export function CategoryCircle({
+function CategoryCircleBase({
   category,
   selected,
   compact,
@@ -30,8 +32,8 @@ export function CategoryCircle({
     {/* The press scale lives on its own wrapper: a layout animation would overwrite a transform on the same view. */}
     <Animated.View style={pressStyle}>
     <Pressable
-      onPressIn={() => { scale.value = withSpring(0.92, { damping: 14, stiffness: 320 }); }}
-      onPressOut={() => { scale.value = withSpring(1, { damping: 12, stiffness: 260 }); }}
+      onPressIn={() => { scale.value = withSpring(0.92, SPRING_PRESS_IN); }}
+      onPressOut={() => { scale.value = withSpring(1, SPRING_PRESS_OUT); }}
       onPress={() => { haptics.select(); onPress(); }}
       disabled={category.isComingSoon}
       className="items-center"
@@ -66,3 +68,6 @@ export function CategoryCircle({
     </Animated.View>
   );
 }
+
+// Memoized so a stable `onPress` from the caller actually skips re-renders from scroll-driven screen state.
+export const CategoryCircle = memo(CategoryCircleBase);

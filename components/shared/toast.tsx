@@ -8,6 +8,7 @@ import {
   View,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { SPRING_PANEL } from '@/constants/motion';
 
 // ─── Types ──────────────────────────────────────────────────────────────────
 
@@ -158,14 +159,16 @@ function ToastPill({
 
           Animated.parallel([
             Animated.spring(translateX, {
-              damping: 20,
-              stiffness: 240,
+              damping: SPRING_PANEL.damping,
+              stiffness: SPRING_PANEL.stiffness,
+              mass: SPRING_PANEL.mass,
               toValue: 0,
               useNativeDriver: true,
             }),
             Animated.spring(translateY, {
-              damping: 20,
-              stiffness: 240,
+              damping: SPRING_PANEL.damping,
+              stiffness: SPRING_PANEL.stiffness,
+              mass: SPRING_PANEL.mass,
               toValue: 0,
               useNativeDriver: true,
             }),
@@ -181,14 +184,16 @@ function ToastPill({
         onPanResponderTerminate: () => {
           Animated.parallel([
             Animated.spring(translateX, {
-              damping: 20,
-              stiffness: 240,
+              damping: SPRING_PANEL.damping,
+              stiffness: SPRING_PANEL.stiffness,
+              mass: SPRING_PANEL.mass,
               toValue: 0,
               useNativeDriver: true,
             }),
             Animated.spring(translateY, {
-              damping: 20,
-              stiffness: 240,
+              damping: SPRING_PANEL.damping,
+              stiffness: SPRING_PANEL.stiffness,
+              mass: SPRING_PANEL.mass,
               toValue: 0,
               useNativeDriver: true,
             }),
@@ -207,8 +212,9 @@ function ToastPill({
   useEffect(() => {
     Animated.parallel([
       Animated.spring(translateY, {
-        damping: 20,
-        stiffness: 220,
+        damping: SPRING_PANEL.damping,
+        stiffness: SPRING_PANEL.stiffness,
+        mass: SPRING_PANEL.mass,
         toValue: 0,
         useNativeDriver: true,
       }),

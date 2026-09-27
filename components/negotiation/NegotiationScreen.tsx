@@ -434,7 +434,7 @@ export default function NegotiationScreen() {
       />
       <KeyboardStickyView
         offset={{ closed: 0, opened: 0 }}
-        className="gap-2 px-4 pt-2"
+        className="gap-2 border-t border-black/5 bg-[#F1F1F3] px-4 pt-2"
         style={{ paddingBottom: keyboardVisible ? 6 : Math.max(insets.bottom, 8) }}
       >
         {approvedPrice > 0 && open ? (

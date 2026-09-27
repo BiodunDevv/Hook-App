@@ -9,19 +9,11 @@ export type DeletionView = {
 };
 
 /** The public page where deletion can be requested or cancelled without the app. */
-export const DELETE_ACCOUNT_PAGE_URL = process.env.EXPO_PUBLIC_DELETE_ACCOUNT_URL || '';
+export const DELETE_ACCOUNT_PAGE_URL = process.env.EXPO_PUBLIC_DELETE_ACCOUNT_URL || 'https://hook-africa.vercel.app/delete-account';
 
-/** Ownership is re-proved here even though the user is signed in: a stolen unlocked phone must not be able to delete the account. */
-export function requestAccountDeletion(input: { password?: string; code?: string; reason?: string }) {
-  return apiRequest<DeletionView>('/support/account-deletion', {
-    method: 'POST',
-    body: JSON.stringify(input),
-  });
-}
-
-/** For Google/Apple accounts, which have no password: a code is emailed instead. */
-export function sendAccountDeletionCode() {
-  return apiRequest<{ sent: boolean }>('/support/account-deletion/code', { method: 'POST' });
+/** Deleting an account happens on the web page, not inside the app. */
+export function openDeleteAccountPage() {
+  return Linking.openURL(DELETE_ACCOUNT_PAGE_URL);
 }
 
 /** Cancels a scheduled deletion. Works while signed out, since the account cannot sign in until restored. */

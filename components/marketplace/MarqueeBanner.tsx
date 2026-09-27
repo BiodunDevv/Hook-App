@@ -5,13 +5,8 @@ import { AccessibilityInfo, Pressable, Text, View } from "react-native";
 import Animated, { cancelAnimation, Easing, useAnimatedStyle, useSharedValue, withRepeat, withTiming } from "react-native-reanimated";
 
 import { useBannersQuery, type PublicBanner } from "@/lib/mobile-api";
+import { resolveBannerColors } from "@/lib/banner-tone";
 
-const TONES: Record<string, { bg: string; fg: string }> = {
-  gold: { bg: "#FFC809", fg: "#111111" },
-  dark: { bg: "#18181B", fg: "#FFFFFF" },
-  green: { bg: "#059669", fg: "#FFFFFF" },
-  red: { bg: "#DC2626", fg: "#FFFFFF" },
-};
 const SPEED = 42; // points per second
 
 function open(banner: PublicBanner) {
@@ -43,7 +38,7 @@ export function MarqueeBanner({ placement = "home" }: { placement?: "home" | "ca
 
   const style = useAnimatedStyle(() => ({ transform: [{ translateX: x.value }] }));
   if (!banners.length) return null;
-  const tone = TONES[banners[0].tone] || TONES.gold;
+  const tone = resolveBannerColors(banners[0]);
 
   const items = banners.map((banner, index) => (
     <Pressable key={`${banner.id}-${index}`} accessibilityRole={banner.linkType !== "none" ? "link" : "text"} onPress={() => open(banner)} className="flex-row items-center px-6">
@@ -54,7 +49,7 @@ export function MarqueeBanner({ placement = "home" }: { placement?: "home" | "ca
       ) : (
         <View className="mr-3 h-1 w-1 rounded-full" style={{ backgroundColor: tone.fg, opacity: 0.6 }} />
       )}
-      <Text numberOfLines={1} style={{ color: TONES[banner.tone]?.fg || tone.fg }} className="text-[12px] font-semibold">
+      <Text numberOfLines={1} style={{ color: resolveBannerColors(banner).fg }} className="text-[12px] font-semibold">
         {banner.text}
       </Text>
     </Pressable>

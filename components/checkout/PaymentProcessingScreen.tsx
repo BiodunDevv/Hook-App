@@ -26,12 +26,7 @@ const STEPS: { key: PaymentStage; label: string }[] = [
   { key: "confirming", label: "Payment confirmed" },
 ];
 
-/**
- * Shown from the moment checkout is submitted until the order screen takes
- * over. Without it the cart is already empty by this point, so the checkout
- * screen's empty-cart guard would paint "Your cart is empty" over a payment
- * that is actually in flight.
- */
+/** Shown from checkout submission until the order screen takes over, so the empty-cart guard doesn't flash first. */
 export function PaymentProcessingScreen({ stage }: { stage: PaymentStage }) {
   const insets = useSafeAreaInsets();
   const spin = useRef(new Animated.Value(0)).current;

@@ -63,8 +63,7 @@ export function resolveColor(value?: string): ResolvedProductColor {
   const raw = String(value || "").trim();
   return {
     hex,
-    // Codes and known colour words become an everyday name ("#14213D" -> "Navy");
-    // anything else a person typed is kept, tidied.
+    // Codes/known colour words become an everyday name; anything else typed is kept, tidied.
     name: colorName(parseColor(value) ? hex : raw) || "Unspecified",
   };
 }

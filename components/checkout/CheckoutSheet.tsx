@@ -1,4 +1,4 @@
-import BottomSheet, { BottomSheetBackdrop, type BottomSheetBackdropProps } from "@gorhom/bottom-sheet";
+import BottomSheet, { BottomSheetBackdrop, BottomSheetView, type BottomSheetBackdropProps } from "@gorhom/bottom-sheet";
 import { useCallback, useEffect, useRef, type PropsWithChildren } from "react";
 import { BackHandler, Pressable, Text, View } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
@@ -46,7 +46,8 @@ export function CheckoutSheet({ visible, onClose, title, children, fullScreen = 
       handleIndicatorStyle={{ backgroundColor: "#C8C8CC" }}
       onChange={(index) => { if (index === -1 && visibleRef.current) onClose(); }}
     >
-      <View accessibilityViewIsModal style={{ flex: 1, minHeight: 0 }}>
+      {/* Must be BottomSheetView, not a plain View — a plain View breaks nested ScrollView scrolling on Android. */}
+      <BottomSheetView accessibilityViewIsModal style={{ flex: 1, minHeight: 0 }}>
         <View style={{ paddingHorizontal: 20, paddingBottom: 16, flexDirection: "row", alignItems: "center", gap: 12 }}>
           <Text accessibilityRole="header" style={{ flex: 1, fontFamily: "NunitoSans-Bold", fontSize: 20, color: designTokens.color.ink }}>{title}</Text>
           <Pressable accessibilityRole="button" accessibilityLabel="Close" onPress={onClose} style={{ width: 44, height: 44, borderRadius: 22, alignItems: "center", justifyContent: "center", backgroundColor: "white" }}>
@@ -54,7 +55,7 @@ export function CheckoutSheet({ visible, onClose, title, children, fullScreen = 
           </Pressable>
         </View>
         <View style={{ flex: 1, minHeight: 0 }}>{children}</View>
-      </View>
+      </BottomSheetView>
     </BottomSheet>
   );
 }

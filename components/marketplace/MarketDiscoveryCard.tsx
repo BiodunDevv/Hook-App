@@ -1,3 +1,4 @@
+import { memo } from "react";
 import { PressScale } from "@/components/motion/PressScale";
 import { Ionicons } from "@expo/vector-icons";
 import { router } from "expo-router";
@@ -43,7 +44,7 @@ function getFrameColor(color: string) {
   return `#${channels.join("")}`;
 }
 
-export function MarketDiscoveryCard({
+function MarketDiscoveryCardBase({
   market,
   index,
 }: {
@@ -122,3 +123,6 @@ export function MarketDiscoveryCard({
     </PressScale>
   );
 }
+
+// Memoized so scroll-driven state on the Home screen doesn't re-render every card in the list.
+export const MarketDiscoveryCard = memo(MarketDiscoveryCardBase);
