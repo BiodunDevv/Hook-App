@@ -21,6 +21,7 @@ import { AuthSheetProvider } from "@/components/auth/AuthSheetProvider";
 import { getBiometricEnabled, getSession } from "@/lib/session";
 import { checkHookHealth } from "@/lib/health";
 import { BackendUnavailableScreen } from "@/components/shared/BackendUnavailableScreen";
+import { ReplacementFab } from "@/components/shared/ReplacementFab";
 
 export const unstable_settings = { anchor: "(tabs)" };
 
@@ -53,6 +54,8 @@ export default function RootLayout() {
   const isLaunchSplash = pathname === "/splash";
   const isMarketHero = pathname.includes("/markets/");
   const isMainTab = ['/', '/discover', '/messages', '/profile'].includes(pathname);
+  // Shown on every screen except Profile (its own approval banner already covers this) and an order's own detail page (where the approval card it points to is already on screen).
+  const hideReplacementFab = pathname === '/profile' || (pathname.startsWith('/orders/') && pathname !== '/orders');
   const safeAreaBackground = isMainTab ? '#F1F1F3' : '#FFFFFF';
   // Every route fills the window; footers reserve their own safe area instead of shrinking the navigator.
   const isFullBleedRoute = isLaunchSplash || pathname === "/onboarding";
@@ -315,6 +318,7 @@ export default function RootLayout() {
               />
             </Stack>
             <NetworkBanner />
+            <ReplacementFab hidden={hideReplacementFab} />
             <StatusBar animated style={isMarketHero ? "light" : "dark"} />
             <ToastProvider />
                   </ThemeProvider>

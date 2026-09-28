@@ -20,6 +20,7 @@ import { toast } from "@/components/shared/toast";
 import { openDeleteAccountPage } from "@/lib/account-deletion-api";
 import { openSupport } from "@/lib/support-api";
 import { SupportPushBanner } from "@/components/shared/SupportPushBanner";
+import { ReplacementApprovalBanner } from "@/components/shared/ReplacementApprovalBanner";
 import { logout, useLocalSessionQuery } from "@/lib/auth-api";
 import { useCreditsQuery } from "@/lib/mobile-api";
 import { unregisterPushToken } from "@/lib/push";
@@ -178,6 +179,7 @@ export default function ProfileScreen() {
           </View>
         </View>
 
+        <ReplacementApprovalBanner />
         <SupportPushBanner />
 
         <View className="px-4">

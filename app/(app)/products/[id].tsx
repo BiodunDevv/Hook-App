@@ -473,8 +473,6 @@ export default function ProductDetailScreen() {
             />
           ) : null}
 
-          <ProductInformation key={product.publicId} name={product.title} description={product.description} />
-
           {axes.map((axis) => {
             const chosen = activeSelection[axis.key] || "";
             const available = availableValues(variants, activeSelection, axis.key);
@@ -536,6 +534,8 @@ export default function ProductDetailScreen() {
               </View>
             );
           })}
+
+          <ProductInformation key={product.publicId} name={product.title} description={product.description} />
 
           <Text className="text-xs text-black/55">
             {unavailable
@@ -612,7 +612,7 @@ export default function ProductDetailScreen() {
               disabled={unavailable || pendingCartAction !== null}
               busy={pendingCartAction === 'add'}
               onPress={() => (variantRequired ? promptForOptions() : void addToCart(false))}
-              tone="secondary"
+              tone="white"
             />
           </View>
           <BottomActionButton

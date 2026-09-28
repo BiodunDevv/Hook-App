@@ -18,7 +18,7 @@ import { HookLoader } from "@/components/shared/HookLoader";
 import { RemoteImage } from "@/components/shared/RemoteImage";
 import { toast } from "@/components/shared/toast";
 import { openOrderSupport } from "@/lib/support-api";
-import { waitForPaymentConfirmation } from "@/lib/payment-status";
+import { waitForPaymentConfirmation, waitForSubstitutionConfirmation } from "@/lib/payment-status";
 import {
   useCancelOrderMutation,
   useCreatePaymentLinkMutation,
@@ -65,6 +65,7 @@ export default function OrderDetailScreen() {
   const respondToSubstitution = useRespondToSubstitutionMutation();
   const [paymentBusy, setPaymentBusy] = React.useState(false);
   const [cancelOpen, setCancelOpen] = React.useState(false);
+  const [substitutionConfirm, setSubstitutionConfirm] = React.useState<{ entry: any; decision: "ACCEPT" | "DECLINE" } | null>(null);
   const [expanded, setExpanded] = React.useState<Record<string, boolean>>({});
   const order = query.data as any;
   const [refreshing, setRefreshing] = React.useState(false);
@@ -114,6 +115,16 @@ export default function OrderDetailScreen() {
     } finally { setPaymentBusy(false); }
   }
 
+  async function declineReplacement(entry: any) {
+    if (!id || respondToSubstitution.isPending) return;
+    try {
+      await respondToSubstitution.mutateAsync({ orderId: id, substitutionId: entry.id, decision: "DECLINE", version: entry.version, idempotencyKey: Crypto.randomUUID() });
+      toast.info("Replacement declined");
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Response could not be sent");
+    }
+  }
+
   async function approveReplacement(entry: any) {
     if (!id || respondToSubstitution.isPending) return;
     try {
@@ -129,9 +140,15 @@ export default function OrderDetailScreen() {
         toast.info("Your replacement is saved. You can complete the top-up from this order.");
         return;
       }
-      await respondToSubstitution.mutateAsync({ orderId: id, substitutionId: entry.id, decision: "ACCEPT", version: result.version, idempotencyKey: Crypto.randomUUID() });
+      const outcome = await waitForSubstitutionConfirmation(id, result.id || entry.id);
       await query.refetch();
-      toast.success("Top-up confirmed. Fulfilment can continue.");
+      if (outcome === "confirmed") {
+        toast.success("Top-up confirmed. Fulfilment can continue.");
+      } else if (outcome === "failed") {
+        toast.error("The replacement could not be confirmed. Please try again.");
+      } else {
+        toast.info("Payment confirmation is still processing");
+      }
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "Replacement could not be processed");
     } finally {
@@ -172,11 +189,15 @@ export default function OrderDetailScreen() {
 
       <Reveal index={3} className="mt-4"><Section title="Items">{order.items?.map((item: any) => <View key={item.id || item.title} className="mb-3 flex-row gap-3 last:mb-0"><View className="h-20 w-20 overflow-hidden rounded-2xl bg-[#f1f1f2]"><RemoteImage uri={item.imageUrl} /></View><View className="flex-1"><View className="flex-row justify-between gap-3"><Text className="flex-1 text-sm font-black leading-5">{item.title}</Text><Text className="text-sm font-black">{money(item.lineTotalMinor)}</Text></View><Text className="mt-1 text-xs text-[#777]">{Object.entries(item.variants || {}).filter(([, value]) => Boolean(value)).map(([key, value]) => friendlyVariantValue(key, value)).join(" · ") || "Standard"}</Text><Text className="mt-2 text-xs font-bold text-[#555]">{money(item.unitPriceMinor)} × {item.quantity}</Text></View></View>)}</Section></Reveal>
 
+      {order.substitutions?.filter((entry: any) => ["OPEN", "ADMIN_REVIEW"].includes(entry.status)).map((entry: any) => <View key={entry.id} className="mt-4 rounded-[22px] bg-white p-4">
+        <View className="flex-row items-center gap-3"><View className="h-10 w-10 items-center justify-center rounded-full bg-[#fff4c7]"><Ionicons name="alert-circle-outline" size={20} color="#9a7400" /></View><View className="flex-1"><Text className="font-black">We found an issue with an item</Text><Text className="mt-1 text-xs leading-5 text-[#777]">Our team is working on a solution and will update you shortly.</Text></View></View>
+        <Text className="mt-3 text-sm leading-6 text-[#666]">{entry.summary}</Text>
+      </View>)}
       {order.substitutions?.filter((entry: any) => entry.status === "CUSTOMER_APPROVAL_PENDING").map((entry: any) => <View key={entry.id} className="mt-4 overflow-hidden rounded-[22px] border-2 border-hook bg-[#fff9df] p-4">
         <View className="flex-row items-center gap-2"><Ionicons name="swap-horizontal" size={21} color="#111" /><Text className="flex-1 text-[17px] font-black">Replacement needs your approval</Text></View>
         <Text className="mt-2 text-sm leading-6 text-[#666]">{entry.summary}</Text>
         <View className="mt-4 rounded-2xl bg-white p-4"><Text className="text-xs font-bold uppercase text-[#888]">Proposed item</Text><Text className="mt-1 text-base font-black">{entry.proposal?.productTitle}</Text><Text className="mt-1 text-sm text-[#666]">{Object.entries(entry.proposal?.selectedVariants || {}).filter(([, value]) => Boolean(value)).map(([key, value]) => friendlyVariantValue(key, value as string)).join(" · ")} · Qty {entry.proposal?.quantity}</Text><View className="mt-3 flex-row justify-between"><Text className="text-sm text-[#666]">Price difference</Text><Text className={`font-black ${Number(entry.adjustmentMinor) < 0 ? "text-emerald-600" : "text-black"}`}>{Number(entry.adjustmentMinor) > 0 ? "+" : ""}{money(Math.abs(Number(entry.adjustmentMinor || 0)))}</Text></View></View>
-        <View className="mt-3 flex-row gap-2"><Pressable disabled={respondToSubstitution.isPending} onPress={async () => { try { await respondToSubstitution.mutateAsync({ orderId: id!, substitutionId: entry.id, decision: "DECLINE", version: entry.version, idempotencyKey: Crypto.randomUUID() }); toast.info("Replacement declined"); } catch (error) { toast.error(error instanceof Error ? error.message : "Response could not be sent"); } }} className="h-12 flex-1 items-center justify-center rounded-2xl border border-black/10 bg-white"><Text className="font-black">Decline</Text></Pressable><Pressable disabled={respondToSubstitution.isPending} onPress={() => void approveReplacement(entry)} className="h-12 flex-1 items-center justify-center rounded-2xl bg-hook"><Text className="font-black">{Number(entry.adjustmentMinor) > 0 ? `Accept & pay ${money(entry.adjustmentMinor)}` : "Accept"}</Text></Pressable></View>
+        <View className="mt-3 flex-row gap-2"><Pressable disabled={respondToSubstitution.isPending} onPress={() => setSubstitutionConfirm({ entry, decision: "DECLINE" })} className="h-12 flex-1 items-center justify-center rounded-2xl border border-black/10 bg-white"><Text className="font-black">Decline</Text></Pressable><Pressable disabled={respondToSubstitution.isPending} onPress={() => setSubstitutionConfirm({ entry, decision: "ACCEPT" })} className="h-12 flex-1 items-center justify-center rounded-2xl bg-hook"><Text className="font-black">{Number(entry.adjustmentMinor) > 0 ? `Accept & pay ${money(entry.adjustmentMinor)}` : "Accept"}</Text></Pressable></View>
       </View>)}
       {order.substitutions?.filter((entry: any) => ["PAYMENT_PENDING", "REFUND_PENDING"].includes(entry.status)).map((entry: any) => <View key={entry.id} className="mt-4 rounded-[22px] bg-white p-4"><View className="flex-row items-center gap-3"><View className="h-10 w-10 items-center justify-center rounded-full bg-[#fff4c7]"><Ionicons name={entry.status === "PAYMENT_PENDING" ? "card-outline" : "return-down-back-outline"} size={20} color="#9a7400" /></View><View className="flex-1"><Text className="font-black">{entry.status === "PAYMENT_PENDING" ? "Top-up required" : "Refund processing"}</Text><Text className="mt-1 text-xs leading-5 text-[#777]">{entry.status === "PAYMENT_PENDING" ? "Complete the secure top-up so fulfilment can resume." : "Your refund is being verified. Fulfilment resumes automatically after confirmation."}</Text></View></View>{entry.status === "PAYMENT_PENDING" && entry.adjustmentAuthorizationUrl ? <Pressable disabled={respondToSubstitution.isPending} onPress={() => void approveReplacement(entry)} className="mt-3 h-12 items-center justify-center rounded-2xl bg-hook"><Text className="font-black">Pay {money(Math.abs(Number(entry.adjustmentMinor || 0)))}</Text></Pressable> : null}</View>)}
 
@@ -200,5 +221,30 @@ export default function OrderDetailScreen() {
     </ScrollView>}
 
     <HookConfirmSheet visible={cancelOpen} title="Cancel this order?" message="This will cancel the unpaid order and deactivate every payment link created for it." confirmLabel="Cancel order" cancelLabel="Keep order" destructive busy={cancelOrder.isPending} onClose={() => setCancelOpen(false)} onConfirm={async () => { if (!id) return; try { await cancelOrder.mutateAsync({ orderId: id, reason: "Cancelled by customer before payment" }); setCancelOpen(false); toast.success("Order cancelled"); } catch (error) { toast.error(error instanceof Error ? error.message : "Order could not be cancelled"); } }} />
+
+    <HookConfirmSheet
+      visible={Boolean(substitutionConfirm)}
+      title={substitutionConfirm?.decision === "DECLINE" ? "Decline this replacement?" : "Accept this replacement?"}
+      message={
+        substitutionConfirm?.decision === "DECLINE"
+          ? "We'll look for another option and update you. This cannot be undone."
+          : Number(substitutionConfirm?.entry.adjustmentMinor) > 0
+            ? `You'll be taken to a secure checkout to pay the ${money(substitutionConfirm?.entry.adjustmentMinor)} difference before fulfilment continues.`
+            : Number(substitutionConfirm?.entry.adjustmentMinor) < 0
+              ? `${substitutionConfirm?.entry.proposal?.productTitle || "This item"} will replace the original — the price difference is refunded automatically.`
+              : `${substitutionConfirm?.entry.proposal?.productTitle || "This item"} will replace the original at no extra cost.`
+      }
+      confirmLabel={substitutionConfirm?.decision === "DECLINE" ? "Decline replacement" : "Accept replacement"}
+      cancelLabel="Go back"
+      destructive={substitutionConfirm?.decision === "DECLINE"}
+      busy={respondToSubstitution.isPending}
+      onClose={() => setSubstitutionConfirm(null)}
+      onConfirm={async () => {
+        if (!substitutionConfirm) return;
+        if (substitutionConfirm.decision === "DECLINE") await declineReplacement(substitutionConfirm.entry);
+        else await approveReplacement(substitutionConfirm.entry);
+        setSubstitutionConfirm(null);
+      }}
+    />
   </View>;
 }

@@ -6,7 +6,8 @@ import { useCustomerSessionQuery, useNotificationsQuery } from "@/lib/mobile-api
 import { isCustomerSession } from "@/lib/session";
 
 // The bell icon shown across marketplace headers, with an unread-count badge.
-export function NotificationBellButton({ color = "#8B6D52" }: { color?: string }) {
+// Bare icon, no background chip — sits directly on the header's own yellow.
+export function NotificationBellButton({ color = "#111" }: { color?: string }) {
   const session = useCustomerSessionQuery();
   const { openAuth } = useAuthSheet();
   const signedIn = isCustomerSession(session.data);
@@ -17,11 +18,12 @@ export function NotificationBellButton({ color = "#8B6D52" }: { color?: string }
     <Pressable
       accessibilityLabel={unread ? `Open notifications, ${unread} unread` : "Open notifications"}
       onPress={() => (signedIn ? router.push("/notifications" as never) : openAuth("/notifications" as never))}
-      className="h-11 w-11 items-center justify-center rounded-full bg-white"
+      hitSlop={10}
+      className="h-11 w-11 items-center justify-center"
     >
-      <Ionicons name="notifications-outline" size={20} color={color} />
+      <Ionicons name={unread > 0 ? "notifications" : "notifications-outline"} size={23} color={color} />
       {unread > 0 ? (
-        <View className="absolute right-1.5 top-1.5 h-4 min-w-4 items-center justify-center rounded-full bg-red-500 px-1">
+        <View className="absolute right-1.5 top-1.5 h-4 min-w-4 items-center justify-center rounded-full border-2 border-[#FFD93E] bg-red-500 px-1">
           <Text className="text-[10px] font-bold leading-none text-white">{unread > 9 ? "9+" : unread}</Text>
         </View>
       ) : null}

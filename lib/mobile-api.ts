@@ -226,6 +226,7 @@ export const mobileQueryKeys = {
   referrals: () => ["mobile", "referrals"] as const,
   orders: (params?: QueryParams) => ["mobile", "orders", params ?? {}] as const,
   order: (id: string) => ["mobile", "orders", id] as const,
+  pendingApprovals: () => ["mobile", "orders", "pending-approvals"] as const,
   orderFulfilment: (id: string) =>
     ["mobile", "orders", id, "fulfilment"] as const,
   negotiations: (params?: QueryParams) =>
@@ -1380,6 +1381,28 @@ export function useOrdersQuery(params?: QueryParams) {
     enabled: isCustomerSession(session.data),
     queryKey: mobileQueryKeys.orders(params),
     queryFn: () => apiRequest(`/orders${toQueryString(params)}`),
+  });
+}
+
+export type PendingApproval = {
+  itemResolutionId: string;
+  orderId: string;
+  displayNumber?: string;
+  productTitle?: string;
+  summary?: string;
+  adjustmentMinor?: number;
+  createdAt?: string;
+  status?: "CUSTOMER_APPROVAL_PENDING" | "PAYMENT_PENDING";
+};
+
+/** Cross-order signal: does this customer have any replacement awaiting their decision right now. */
+export function usePendingApprovalsQuery() {
+  const session = useCustomerSessionQuery();
+  return useQuery({
+    enabled: isCustomerSession(session.data),
+    queryKey: mobileQueryKeys.pendingApprovals(),
+    queryFn: () => apiRequest<{ count: number; items: PendingApproval[] }>("/orders/pending-approvals"),
+    staleTime: 60_000,
   });
 }
 
