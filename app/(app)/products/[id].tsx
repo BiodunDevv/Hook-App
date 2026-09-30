@@ -15,6 +15,7 @@ import {
 import Animated, { useReducedMotion } from "react-native-reanimated";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
+import { AvailabilityBadge } from "@/components/marketplace/AvailabilityBadge";
 import { CartButton } from "@/components/cart/CartButton";
 import { useCartAddAnimation } from "@/components/cart/useCartAddAnimation";
 import { CatalogProductCard } from "@/components/marketplace/CatalogProductCard";
@@ -436,6 +437,7 @@ export default function ProductDetailScreen() {
                     </Text>
                   </View>
                 ) : null}
+                <AvailabilityBadge verifiedAt={product.lastAvailabilityConfirmedAt} />
               </View>
               {negotiatedPriceMinor > 0 ? (
                 <View className="mt-2 self-start rounded-full bg-[#FFF2B8] px-3 py-1.5">
@@ -472,8 +474,6 @@ export default function ProductDetailScreen() {
               onPress={() => { setNegotiationOptionsVisible(true); void query.refetch(); }}
             />
           ) : null}
-
-          <ProductInformation key={product.publicId} name={product.title} description={product.description} />
 
           {axes.map((axis) => {
             const chosen = activeSelection[axis.key] || "";
@@ -536,6 +536,8 @@ export default function ProductDetailScreen() {
               </View>
             );
           })}
+
+          <ProductInformation key={product.publicId} name={product.title} description={product.description} />
 
           <Text className="text-xs text-black/55">
             {unavailable
@@ -612,7 +614,7 @@ export default function ProductDetailScreen() {
               disabled={unavailable || pendingCartAction !== null}
               busy={pendingCartAction === 'add'}
               onPress={() => (variantRequired ? promptForOptions() : void addToCart(false))}
-              tone="secondary"
+              tone="white"
             />
           </View>
           <BottomActionButton

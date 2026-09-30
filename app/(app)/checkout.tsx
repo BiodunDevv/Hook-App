@@ -329,11 +329,12 @@ export default function CheckoutScreen() {
       const checkoutUrl = new URL(paymentLink.url);
       checkoutUrl.searchParams.set("appReturn", "1");
       setPaymentFlowActive(true);
+      // The session's own redirect match already closes the browser — dismissBrowser() pairs
+      // with openBrowserAsync, not openAuthSessionAsync, and throws when called here.
       const browserResult = await WebBrowser.openAuthSessionAsync(
         checkoutUrl.toString(),
         "hook://payments/return",
       );
-      await WebBrowser.dismissBrowser();
       if (browserResult.type === "cancel" || browserResult.type === "dismiss") {
         // Closing the payment page is not a completed payment — say so clearly instead of moving on quietly.
         const isPod = method === "PAY_AT_HANDOVER";

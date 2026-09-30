@@ -30,7 +30,7 @@ export function BottomActionButton({
   disabled?: boolean;
   loading?: boolean;
   busy?: boolean;
-  tone?: "primary" | "secondary";
+  tone?: "primary" | "secondary" | "white";
   icon?: IconName;
   flex?: number;
 }) {
@@ -39,7 +39,9 @@ export function BottomActionButton({
     ? designTokens.color.disabled
     : tone === "primary"
       ? designTokens.color.brand
-      : designTokens.color.surfaceMuted;
+      : tone === "white"
+        ? "#FFFFFF"
+        : designTokens.color.surfaceMuted;
 
   return (
     <PressScale
@@ -53,7 +55,7 @@ export function BottomActionButton({
       }}
       scale={0.97}
       style={{ flex }}
-      innerStyle={[styles.button, { backgroundColor }]}
+      innerStyle={[styles.button, { backgroundColor }, tone === "white" && !inactive ? styles.whiteBorder : null]}
     >
       {loading ? (
         <HookLoader size="button" />
@@ -93,6 +95,7 @@ const styles = StyleSheet.create({
     borderRadius: designTokens.radius.control,
     paddingHorizontal: designTokens.spacing.lg,
   },
+  whiteBorder: { borderWidth: 1.5, borderColor: "rgba(0,0,0,0.12)" },
   buttonLabel: {
     color: designTokens.color.ink,
     fontFamily: designTokens.typography.buttonFont,

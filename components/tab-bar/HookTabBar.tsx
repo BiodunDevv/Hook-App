@@ -16,7 +16,7 @@ import Animated, {
   useSharedValue,
   withSpring,
 } from "react-native-reanimated";
-import { getCartItems, useCartQuery, useNegotiationsQuery } from "@/lib/mobile-api";
+import { getCartItems, useCartQuery, useNegotiationsQuery, usePendingApprovalsQuery } from "@/lib/mobile-api";
 import { countActiveNegotiations } from "@/lib/negotiations";
 import { useLocalSessionQuery } from "@/lib/auth-api";
 import { useAuthSheet } from "@/components/auth/AuthSheetProvider";
@@ -125,6 +125,7 @@ export function HookTabBar({
   const insets = useSafeAreaInsets();
   const cart = useCartQuery();
   const negotiations = useNegotiationsQuery();
+  const pendingApprovals = usePendingApprovalsQuery();
   const session = useLocalSessionQuery();
   const { openAuth } = useAuthSheet();
   const cartCount = getCartItems(cart.data).reduce(
@@ -191,7 +192,13 @@ export function HookTabBar({
                 key={route.key}
                 selected={selected}
                 item={item}
-                badgeCount={route.name === "messages" ? activeNegotiations : 0}
+                badgeCount={
+                  route.name === "messages"
+                    ? activeNegotiations
+                    : route.name === "profile"
+                      ? pendingApprovals.data?.count || 0
+                      : 0
+                }
                 accessibilityLabel={options.tabBarAccessibilityLabel}
                 onLongPress={() =>
                   navigation.emit({ type: "tabLongPress", target: route.key })

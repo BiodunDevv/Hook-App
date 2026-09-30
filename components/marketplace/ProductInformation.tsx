@@ -1,57 +1,48 @@
 import { Ionicons } from "@expo/vector-icons";
-import { useId, useState } from "react";
-import { Pressable, StyleSheet, Text, View } from "react-native";
-import Animated, { Easing, ReduceMotion, useAnimatedStyle, withTiming } from "react-native-reanimated";
+import { StyleSheet, Text, View } from "react-native";
 
-function InformationSection({ title, children, initiallyOpen = false, last = false }: {
+/** A static, always-expanded info row — no toggle, since every section here should just be visible. */
+function InformationSection({ title, children, last = false }: {
   title: string;
   children: React.ReactNode;
-  initiallyOpen?: boolean;
   last?: boolean;
 }) {
-  const [open, setOpen] = useState(initiallyOpen);
-  const [height, setHeight] = useState(0);
-  const contentId = useId();
-  const animation = useAnimatedStyle(() => ({
-    height: withTiming(open ? height : 0, {
-      duration: 240,
-      easing: Easing.inOut(Easing.quad),
-      reduceMotion: ReduceMotion.System,
-    }),
-    opacity: withTiming(open ? 1 : 0, { duration: 180, reduceMotion: ReduceMotion.System }),
-  }), [open, height]);
-  const chevron = useAnimatedStyle(() => ({
-    transform: [{ rotate: withTiming(open ? "180deg" : "0deg", {
-      duration: 240, reduceMotion: ReduceMotion.System,
-    }) }],
-  }), [open]);
-
   return (
     <View style={!last && styles.divider}>
-      <Pressable
-        accessibilityRole="button"
-        accessibilityLabel={title}
-        accessibilityState={{ expanded: open }}
-        onPress={() => setOpen((current) => !current)}
-        style={styles.header}
-        hitSlop={4}
-      >
+      <View style={styles.header}>
         <Text style={styles.title}>{title}</Text>
-        <Animated.View style={chevron}>
-          <Ionicons name="chevron-down" size={17} color="#111111" />
-        </Animated.View>
-      </Pressable>
-      <Animated.View style={[styles.clip, animation]} pointerEvents={open ? "auto" : "none"}>
-        <View
-          nativeID={contentId}
-          accessibilityElementsHidden={!open}
-          importantForAccessibility={open ? "auto" : "no-hide-descendants"}
-          onLayout={(event) => setHeight(event.nativeEvent.layout.height)}
-          style={styles.content}
-        >
-          {children}
+        <Ionicons name="chevron-up" size={17} color="#111111" />
+      </View>
+      <View style={styles.content}>{children}</View>
+    </View>
+  );
+}
+
+const RETURN_BADGES = ["7 days return", "Return if item damaged"];
+
+function HookProtectionCard() {
+  return (
+    <View style={styles.protectionWrap}>
+      <View style={styles.protectionCard}>
+        <View style={styles.protectionHeader}>
+          <View style={styles.iconBadge}>
+            <Ionicons name="shield-checkmark" size={14} color="#9a7400" />
+          </View>
+          <Text style={styles.title}>Hook Protection</Text>
         </View>
-      </Animated.View>
+        <View style={{ gap: 12 }}>
+          <Text style={styles.body}>•  Product sourced by Hook</Text>
+          <Text style={styles.body}>•  Item checked before dispatch</Text>
+          <Text style={styles.body}>•  Payment protected under Hook refund policy</Text>
+        </View>
+      </View>
+      <View style={styles.badgeRow}>
+        {RETURN_BADGES.map((label) => (
+          <View key={label} style={styles.badge}>
+            <Text style={styles.badgeText}>{label}</Text>
+          </View>
+        ))}
+      </View>
     </View>
   );
 }
@@ -59,19 +50,15 @@ function InformationSection({ title, children, initiallyOpen = false, last = fal
 export function ProductInformation({ name, description }: { name: string; description?: string | null }) {
   return (
     <View>
-      <InformationSection title="Description" initiallyOpen>
+      <InformationSection title="Description">
         <Text style={styles.body}>{description?.trim() || "Product details are not yet available. Contact Hook for more information before ordering."}</Text>
       </InformationSection>
-      <InformationSection title="What you'll receive">
+      <InformationSection title="What you'll receive" last>
         <Text style={styles.body}>•  1x {name}</Text>
         <Text style={styles.body}>•  Original packaging</Text>
         <Text style={styles.body}>•  Hook authenticity tag</Text>
       </InformationSection>
-      <InformationSection title="Hook Protection" last>
-        <Text style={styles.body}>•  Product sourced by Hook</Text>
-        <Text style={styles.body}>•  Item checked before dispatch</Text>
-        <Text style={styles.body}>•  Payment protected under refund policy</Text>
-      </InformationSection>
+      <HookProtectionCard />
     </View>
   );
 }
@@ -79,8 +66,21 @@ export function ProductInformation({ name, description }: { name: string; descri
 const styles = StyleSheet.create({
   divider: { borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: "#A7ABB2" },
   header: { minHeight: 56, flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: 12 },
+  iconBadge: { height: 26, width: 26, borderRadius: 13, alignItems: "center", justifyContent: "center", backgroundColor: "#FFF3CC" },
   title: { flex: 1, fontSize: 16, fontFamily: "NunitoSans-SemiBold", color: "#111111" },
-  clip: { overflow: "hidden" },
-  content: { position: "absolute", top: 0, left: 0, right: 0, paddingBottom: 20, gap: 12 },
+  content: { paddingBottom: 20, gap: 12 },
   body: { fontSize: 14, lineHeight: 24, fontFamily: "NunitoSans-Regular", color: "#66666B" },
+  protectionWrap: { marginTop: 4 },
+  protectionCard: {
+    borderRadius: 20,
+    borderWidth: 1.5,
+    borderColor: "#FFC809",
+    backgroundColor: "#FFF9DB",
+    padding: 16,
+    gap: 14,
+  },
+  protectionHeader: { flexDirection: "row", alignItems: "center", gap: 10 },
+  badgeRow: { flexDirection: "row", flexWrap: "wrap", gap: 8, marginTop: 10 },
+  badge: { borderRadius: 999, backgroundColor: "#FFC809", paddingHorizontal: 12, paddingVertical: 8 },
+  badgeText: { fontSize: 12, fontFamily: "NunitoSans-Bold", color: "#111111" },
 });
