@@ -72,6 +72,7 @@ export interface PublicCatalogProduct {
   negotiationAvailable: boolean;
   availabilityStatus: string;
   availabilityNote?: string;
+  lastAvailabilityConfirmedAt?: string;
   isPurchasable: boolean;
   availableQuantity?: number;
   lowStockThreshold?: number;

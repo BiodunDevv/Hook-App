@@ -66,6 +66,10 @@ export default function OrderDetailScreen() {
   const [paymentBusy, setPaymentBusy] = React.useState(false);
   const [cancelOpen, setCancelOpen] = React.useState(false);
   const [substitutionConfirm, setSubstitutionConfirm] = React.useState<{ entry: any; decision: "ACCEPT" | "DECLINE" } | null>(null);
+  // Tracks the whole accept→checkout→confirm round trip for one entry, not just the initial
+  // API call — respondToSubstitution.isPending alone clears the instant the accept request
+  // returns, well before the browser opens and the payment is actually confirmed.
+  const [topUpBusy, setTopUpBusy] = React.useState<string | undefined>();
   const [expanded, setExpanded] = React.useState<Record<string, boolean>>({});
   const order = query.data as any;
   const [refreshing, setRefreshing] = React.useState(false);
@@ -89,8 +93,9 @@ export default function OrderDetailScreen() {
       const checkoutUrl = new URL(link.url);
       checkoutUrl.searchParams.set("appReturn", "1");
       setPaymentFlowActive(true);
+      // The session's own redirect match already closes the browser — dismissBrowser() pairs
+      // with openBrowserAsync, not openAuthSessionAsync, and throws when called here.
       const result = await WebBrowser.openAuthSessionAsync(checkoutUrl.toString(), "hook://payments/return");
-      await WebBrowser.dismissBrowser();
       if (result.type === "cancel" || result.type === "dismiss") return;
       const outcome = await waitForPaymentConfirmation(id);
       await Promise.all([payment.refetch(), query.refetch()]);
@@ -116,7 +121,7 @@ export default function OrderDetailScreen() {
   }
 
   async function declineReplacement(entry: any) {
-    if (!id || respondToSubstitution.isPending) return;
+    if (!id || respondToSubstitution.isPending || topUpBusy) return;
     try {
       await respondToSubstitution.mutateAsync({ orderId: id, substitutionId: entry.id, decision: "DECLINE", version: entry.version, idempotencyKey: Crypto.randomUUID() });
       toast.info("Replacement declined");
@@ -126,7 +131,8 @@ export default function OrderDetailScreen() {
   }
 
   async function approveReplacement(entry: any) {
-    if (!id || respondToSubstitution.isPending) return;
+    if (!id || topUpBusy) return;
+    setTopUpBusy(entry.id);
     try {
       const result = await respondToSubstitution.mutateAsync({ orderId: id, substitutionId: entry.id, decision: "ACCEPT", version: entry.version, idempotencyKey: Crypto.randomUUID() });
       if (!result.adjustmentAuthorizationUrl) {
@@ -135,7 +141,6 @@ export default function OrderDetailScreen() {
       }
       setPaymentFlowActive(true);
       const browserResult = await WebBrowser.openAuthSessionAsync(result.adjustmentAuthorizationUrl, "hook://payments/return");
-      await WebBrowser.dismissBrowser();
       if (browserResult.type === "cancel" || browserResult.type === "dismiss") {
         toast.info("Your replacement is saved. You can complete the top-up from this order.");
         return;
@@ -153,6 +158,7 @@ export default function OrderDetailScreen() {
       toast.error(error instanceof Error ? error.message : "Replacement could not be processed");
     } finally {
       setPaymentFlowActive(false);
+      setTopUpBusy(undefined);
     }
   }
 
@@ -197,9 +203,9 @@ export default function OrderDetailScreen() {
         <View className="flex-row items-center gap-2"><Ionicons name="swap-horizontal" size={21} color="#111" /><Text className="flex-1 text-[17px] font-black">Replacement needs your approval</Text></View>
         <Text className="mt-2 text-sm leading-6 text-[#666]">{entry.summary}</Text>
         <View className="mt-4 rounded-2xl bg-white p-4"><Text className="text-xs font-bold uppercase text-[#888]">Proposed item</Text><Text className="mt-1 text-base font-black">{entry.proposal?.productTitle}</Text><Text className="mt-1 text-sm text-[#666]">{Object.entries(entry.proposal?.selectedVariants || {}).filter(([, value]) => Boolean(value)).map(([key, value]) => friendlyVariantValue(key, value as string)).join(" · ")} · Qty {entry.proposal?.quantity}</Text><View className="mt-3 flex-row justify-between"><Text className="text-sm text-[#666]">Price difference</Text><Text className={`font-black ${Number(entry.adjustmentMinor) < 0 ? "text-emerald-600" : "text-black"}`}>{Number(entry.adjustmentMinor) > 0 ? "+" : ""}{money(Math.abs(Number(entry.adjustmentMinor || 0)))}</Text></View></View>
-        <View className="mt-3 flex-row gap-2"><Pressable disabled={respondToSubstitution.isPending} onPress={() => setSubstitutionConfirm({ entry, decision: "DECLINE" })} className="h-12 flex-1 items-center justify-center rounded-2xl border border-black/10 bg-white"><Text className="font-black">Decline</Text></Pressable><Pressable disabled={respondToSubstitution.isPending} onPress={() => setSubstitutionConfirm({ entry, decision: "ACCEPT" })} className="h-12 flex-1 items-center justify-center rounded-2xl bg-hook"><Text className="font-black">{Number(entry.adjustmentMinor) > 0 ? `Accept & pay ${money(entry.adjustmentMinor)}` : "Accept"}</Text></Pressable></View>
+        <View className="mt-3 flex-row gap-2"><Pressable disabled={respondToSubstitution.isPending || Boolean(topUpBusy)} onPress={() => setSubstitutionConfirm({ entry, decision: "DECLINE" })} className="h-12 flex-1 items-center justify-center rounded-2xl border border-black/10 bg-white disabled:opacity-60"><Text className="font-black">Decline</Text></Pressable><Pressable disabled={respondToSubstitution.isPending || Boolean(topUpBusy)} onPress={() => setSubstitutionConfirm({ entry, decision: "ACCEPT" })} className="h-12 flex-1 items-center justify-center rounded-2xl bg-hook disabled:opacity-60"><Text className="font-black">{Number(entry.adjustmentMinor) > 0 ? `Accept & pay ${money(entry.adjustmentMinor)}` : "Accept"}</Text></Pressable></View>
       </View>)}
-      {order.substitutions?.filter((entry: any) => ["PAYMENT_PENDING", "REFUND_PENDING"].includes(entry.status)).map((entry: any) => <View key={entry.id} className="mt-4 rounded-[22px] bg-white p-4"><View className="flex-row items-center gap-3"><View className="h-10 w-10 items-center justify-center rounded-full bg-[#fff4c7]"><Ionicons name={entry.status === "PAYMENT_PENDING" ? "card-outline" : "return-down-back-outline"} size={20} color="#9a7400" /></View><View className="flex-1"><Text className="font-black">{entry.status === "PAYMENT_PENDING" ? "Top-up required" : "Refund processing"}</Text><Text className="mt-1 text-xs leading-5 text-[#777]">{entry.status === "PAYMENT_PENDING" ? "Complete the secure top-up so fulfilment can resume." : "Your refund is being verified. Fulfilment resumes automatically after confirmation."}</Text></View></View>{entry.status === "PAYMENT_PENDING" && entry.adjustmentAuthorizationUrl ? <Pressable disabled={respondToSubstitution.isPending} onPress={() => void approveReplacement(entry)} className="mt-3 h-12 items-center justify-center rounded-2xl bg-hook"><Text className="font-black">Pay {money(Math.abs(Number(entry.adjustmentMinor || 0)))}</Text></Pressable> : null}</View>)}
+      {order.substitutions?.filter((entry: any) => ["PAYMENT_PENDING", "REFUND_PENDING"].includes(entry.status)).map((entry: any) => <View key={entry.id} className="mt-4 rounded-[22px] bg-white p-4"><View className="flex-row items-center gap-3"><View className="h-10 w-10 items-center justify-center rounded-full bg-[#fff4c7]"><Ionicons name={entry.status === "PAYMENT_PENDING" ? "card-outline" : "return-down-back-outline"} size={20} color="#9a7400" /></View><View className="flex-1"><Text className="font-black">{entry.status === "PAYMENT_PENDING" ? "Top-up required" : "Refund processing"}</Text><Text className="mt-1 text-xs leading-5 text-[#777]">{entry.status === "PAYMENT_PENDING" ? "Complete the secure top-up so fulfilment can resume." : "Your refund is being verified. Fulfilment resumes automatically after confirmation."}</Text></View></View>{entry.status === "PAYMENT_PENDING" && entry.adjustmentAuthorizationUrl ? <Pressable disabled={Boolean(topUpBusy)} onPress={() => void approveReplacement(entry)} className="mt-3 h-12 flex-row items-center justify-center gap-2 rounded-2xl bg-hook disabled:opacity-60">{topUpBusy === entry.id ? <HookLoader size="button" /> : <Text className="font-black">Pay {money(Math.abs(Number(entry.adjustmentMinor || 0)))}</Text>}</Pressable> : null}</View>)}
 
       <Reveal index={4} className="mt-4"><Section title="Order summary"><View className="gap-3"><View className="flex-row justify-between"><Text className="text-sm text-[#666]">Products</Text><Text className="text-sm font-bold">{money(order.subtotalMinor)}</Text></View><View className="flex-row justify-between"><Text className="text-sm text-[#666]">VAT {order.vatRate ? `(${Number(order.vatRate) * 100}%)` : ""}</Text><Text className="text-sm font-bold">{money(order.vatMinor)}</Text></View><View className="flex-row justify-between"><Text className="text-sm text-[#666]">Delivery</Text><Text className="text-sm font-bold">{money(order.deliveryFeeMinor)}</Text></View>{Number(order.couponDiscountMinor || 0) > 0 ? <View className="flex-row justify-between"><Text className="text-sm text-[#666]">{order.couponCode ? `Coupon (${order.couponCode})` : "Coupon"}</Text><Text className="text-sm font-bold text-emerald-600">−{money(order.couponDiscountMinor)}</Text></View> : null}{Number(order.creditsAppliedMinor || 0) > 0 ? <View className="flex-row justify-between"><Text className="text-sm text-[#666]">Hook credit</Text><Text className="text-sm font-bold text-emerald-600">−{money(order.creditsAppliedMinor)}</Text></View> : null}{!Number(order.couponDiscountMinor || 0) && !Number(order.creditsAppliedMinor || 0) && Number(order.discountMinor || 0) > 0 ? <View className="flex-row justify-between"><Text className="text-sm text-[#666]">Discount</Text><Text className="text-sm font-bold text-emerald-600">−{money(order.discountMinor)}</Text></View> : null}<View className="mt-1 flex-row justify-between border-t border-black/10 pt-4"><Text className="text-base font-black">Total</Text><Text className="text-xl font-black">{money(order.totalMinor)}</Text></View></View></Section></Reveal>
 
@@ -237,7 +243,7 @@ export default function OrderDetailScreen() {
       confirmLabel={substitutionConfirm?.decision === "DECLINE" ? "Decline replacement" : "Accept replacement"}
       cancelLabel="Go back"
       destructive={substitutionConfirm?.decision === "DECLINE"}
-      busy={respondToSubstitution.isPending}
+      busy={respondToSubstitution.isPending || topUpBusy === substitutionConfirm?.entry?.id}
       onClose={() => setSubstitutionConfirm(null)}
       onConfirm={async () => {
         if (!substitutionConfirm) return;

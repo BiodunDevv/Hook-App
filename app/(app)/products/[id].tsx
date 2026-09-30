@@ -15,6 +15,7 @@ import {
 import Animated, { useReducedMotion } from "react-native-reanimated";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
+import { AvailabilityBadge } from "@/components/marketplace/AvailabilityBadge";
 import { CartButton } from "@/components/cart/CartButton";
 import { useCartAddAnimation } from "@/components/cart/useCartAddAnimation";
 import { CatalogProductCard } from "@/components/marketplace/CatalogProductCard";
@@ -436,6 +437,7 @@ export default function ProductDetailScreen() {
                     </Text>
                   </View>
                 ) : null}
+                <AvailabilityBadge verifiedAt={product.lastAvailabilityConfirmedAt} />
               </View>
               {negotiatedPriceMinor > 0 ? (
                 <View className="mt-2 self-start rounded-full bg-[#FFF2B8] px-3 py-1.5">

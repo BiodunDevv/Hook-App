@@ -97,8 +97,11 @@ export default function RootLayout() {
 
   useEffect(() => {
     const subscription = Linking.addEventListener("url", ({ url }) => {
+      // Best-effort fallback only: the auth session that opened this redirect already closes
+      // itself on the matching URL, so dismissBrowser() usually has nothing left to dismiss
+      // and throws — never let that surface to the user.
       if (url.startsWith("hook://payments/return")) {
-        void WebBrowser.dismissBrowser();
+        WebBrowser.dismissBrowser().catch(() => undefined);
       }
     });
     return () => subscription.remove();
